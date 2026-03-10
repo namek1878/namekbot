@@ -764,3 +764,84 @@ footer {
     bottom: 10px;
   }
 }
+.namek-lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top, rgba(99,221,255,.10), transparent 30%),
+    rgba(2, 11, 8, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.namek-lock-card {
+  width: min(460px, 100%);
+  border-radius: 26px;
+  padding: 24px;
+  background: rgba(4, 25, 18, 0.92);
+  border: 1px solid rgba(105,255,171,.18);
+  box-shadow: 0 20px 50px rgba(0,0,0,.45);
+  text-align: center;
+}
+
+.namek-lock-badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(226,255,105,.12);
+  border: 1px solid rgba(226,255,105,.22);
+  color: var(--namek-lime);
+  font-weight: 800;
+}
+
+.namek-lock-title {
+  margin: 0 0 10px;
+  font-size: 2rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.namek-lock-text {
+  margin: 0 0 18px;
+  color: var(--text-soft);
+}
+
+.namek-lock-form {
+  display: grid;
+  gap: 12px;
+}
+
+.namek-lock-form input {
+  width: 100%;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--line);
+  color: var(--text-main);
+  outline: none;
+}
+
+.namek-lock-form input:focus {
+  border-color: var(--namek-lime);
+  box-shadow: 0 0 0 4px rgba(226,255,105,.12);
+}
+
+.namek-lock-form button {
+  border: 0;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-weight: 900;
+  background: linear-gradient(180deg, var(--namek-green), var(--namek-green-2));
+  color: #032015;
+}
+
+.namek-lock-error {
+  margin-top: 12px;
+  color: #ffb3bc;
+  font-weight: 700;
+}

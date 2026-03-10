@@ -559,6 +559,30 @@ async function notifyAllUsersNewEntry(entry, excludeTelegramId = 0) {
 }
 
 /* ================== API ================== */
+app.post("/api/namek/unlock", async (req, res) => {
+  try {
+    const password = safeText(req.body?.password || "");
+
+    if (!password) {
+      return res.status(400).json({ ok: false, error: "missing_password" });
+    }
+
+    const { data, error } = await sb
+      .from("namek_passwords")
+      .select("id, password, active")
+      .eq("password", password)
+      .eq("active", true)
+      .limit(1);
+
+    if (error) throw error;
+
+    const isValid = Array.isArray(data) && data.length > 0;
+
+    return res.json({ ok: isValid });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "unlock_error", message: e.message });
+  }
+});
 app.get("/api/namek/entries", async (_req, res) => {
   try {
     const rows = await dbListPublicEntries();

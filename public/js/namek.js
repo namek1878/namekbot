@@ -11,6 +11,8 @@
   const safeStr = (v) => (v == null ? "" : String(v));
   const norm = (v) => safeStr(v).trim().toLowerCase();
 
+  const ACCESS_KEY = "namek_access_ok_v1";
+
   function toast(msg) {
     const el = $("toast");
     if (!el) return;
@@ -21,9 +23,7 @@
   }
 
   function prettify(value) {
-    return safeStr(value)
-      .replace(/_/g, " ")
-      .trim();
+    return safeStr(value).replace(/_/g, " ").trim();
   }
 
   function titleCase(value) {
@@ -85,6 +85,21 @@
     return [];
   }
 
+  function getBestPromoPriceInfo(entry) {
+    const quantities = getVisibleQuantities(entry);
+    if (!quantities.length) return null;
+
+    const first = quantities[0];
+
+    return {
+      currentPrice: safeStr(first.price || "-"),
+      oldPrice: safeStr(first.old_price || first.original_price || ""),
+      promoPrice: safeStr(first.promo_price || first.price || "-"),
+      description: safeStr(first.description || ""),
+      amount: safeStr(first.amount || ""),
+    };
+  }
+
   function escapeHtml(value) {
     return safeStr(value)
       .replace(/&/g, "&amp;")
@@ -92,6 +107,49 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function buildEntryMeta(entry) {
+    return [
+      categoryLabel(entry.category),
+      entry.subcategory ? titleCase(entry.subcategory) : "",
+      entry.micron ? entry.micron : "",
+    ].filter(Boolean).join(" • ");
+  }
+
+  function getEntriesFromLast7Days() {
+    const limit = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    return sortNewestFirst(
+      allEntries.filter((entry) => entry.status === "nouveaute" && entryDateValue(entry) >= limit)
+    );
+  }
+
+  function hasAccess() {
+    return localStorage.getItem(ACCESS_KEY) === "1";
+  }
+
+  function saveAccess() {
+    localStorage.setItem(ACCESS_KEY, "1");
+  }
+
+  function showApp() {
+    $("lockScreen")?.style.setProperty("display", "none");
+    $("appShell")?.style.setProperty("display", "block");
+  }
+
+  async function unlockApp(password) {
+    const res = await fetch("/api/namek/unlock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    return !!data.ok;
   }
 
   /* ================= ELEMENTS ================= */
@@ -118,7 +176,13 @@
   const detailsReal = $("detailsReal");
 
   const newEntries = $("newEntries");
+  const weekNewEntries = $("weekNewEntries");
   const promoEntries = $("promoEntries");
+
+  const unlockForm = $("unlockForm");
+  const unlockPassword = $("unlockPassword");
+  const unlockError = $("unlockError");
+  const unlockButton = $("unlockButton");
 
   /* ================= STATE ================= */
   let allEntries = [];
@@ -172,11 +236,12 @@
   }
 
   function getPromoEntries() {
-    return sortNewestFirst(allEntries.filter((e) => e.status === "promotion")).slice(0, 4);
+    return sortNewestFirst(allEntries.filter((e) => e.status === "promotion")).slice(0, 6);
   }
 
   function renderSpotlights() {
     renderLatestNewEntry();
+    renderWeekNewEntries();
     renderPromoEntries();
   }
 
@@ -188,18 +253,67 @@
     if (!entry) {
       newEntries.className = "spotlight-empty";
       newEntries.innerHTML = "Aucune nouveauté pour le moment.";
+      newEntries.onclick = null;
       return;
     }
 
+    const meta = buildEntryMeta(entry);
+
     newEntries.className = "spotlight-entry";
     newEntries.innerHTML = `
+      ${entry.image_url ? `
+        <div style="margin-bottom:10px;">
+          <img
+            src="${escapeHtml(entry.image_url)}"
+            alt="${escapeHtml(entry.title)}"
+            style="width:100%; max-height:180px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.08);"
+          >
+        </div>
+      ` : ""}
+
       <strong>${escapeHtml(entry.title)}</strong>
-      <small>${escapeHtml(categoryLabel(entry.category))}${entry.subcategory ? ` • ${escapeHtml(titleCase(entry.subcategory))}` : ""}</small>
-      <small>${escapeHtml(entryStatusLabel(entry.status))}</small>
+      <small>${escapeHtml(meta)}</small>
+      <small>${escapeHtml(entry.description || "Aucune description.")}</small>
     `;
 
     newEntries.style.cursor = "pointer";
     newEntries.onclick = () => selectEntry(entry);
+  }
+
+  function renderWeekNewEntries() {
+    if (!weekNewEntries) return;
+
+    const entries = getEntriesFromLast7Days().slice(0, 7);
+
+    if (!entries.length) {
+      weekNewEntries.className = "spotlight-empty";
+      weekNewEntries.innerHTML = "Aucune nouveauté cette semaine.";
+      return;
+    }
+
+    weekNewEntries.className = "";
+    weekNewEntries.innerHTML = `
+      <div class="spotlight-entry" style="gap:10px;">
+        <strong>📅 Nouveautés des 7 derniers jours</strong>
+        ${entries.map((entry) => `
+          <div
+            class="promo-entry"
+            data-entry-id="${escapeHtml(entry.id)}"
+            style="padding:10px 0; border-top:1px solid rgba(255,255,255,.06); cursor:pointer;"
+          >
+            <div style="font-weight:800;">${escapeHtml(entry.title)}</div>
+            <small>${escapeHtml(buildEntryMeta(entry))}</small>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    weekNewEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const entry = allEntries.find((x) => String(x.id) === String(el.dataset.entryId));
+        if (entry) selectEntry(entry);
+      });
+    });
   }
 
   function renderPromoEntries() {
@@ -216,15 +330,37 @@
 
     promoEntries.className = "";
     promoEntries.innerHTML = promos
-      .map(
-        (entry) => `
+      .map((entry) => {
+        const priceInfo = getBestPromoPriceInfo(entry);
+
+        return `
           <div class="spotlight-entry promo-entry" data-entry-id="${escapeHtml(entry.id)}" style="margin-bottom:10px; cursor:pointer;">
             <strong>${escapeHtml(entry.title)}</strong>
-            <small>${escapeHtml(categoryLabel(entry.category))}${entry.subcategory ? ` • ${escapeHtml(titleCase(entry.subcategory))}` : ""}</small>
-            <small>${escapeHtml(entryStatusLabel(entry.status))}</small>
+            <small>${escapeHtml(buildEntryMeta(entry))}</small>
+            <small>${escapeHtml(entry.description || "Aucune description.")}</small>
+
+            ${
+              priceInfo
+                ? `
+                  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
+                    ${
+                      priceInfo.oldPrice
+                        ? `<span style="text-decoration:line-through; opacity:.7;">Avant : ${escapeHtml(priceInfo.oldPrice)}</span>`
+                        : ""
+                    }
+                    <span style="font-weight:800; color:#ffd25a;">Maintenant : ${escapeHtml(priceInfo.promoPrice || priceInfo.currentPrice)}</span>
+                    ${
+                      priceInfo.amount
+                        ? `<span style="opacity:.8;">${escapeHtml(priceInfo.amount)}</span>`
+                        : ""
+                    }
+                  </div>
+                `
+                : ""
+            }
           </div>
-        `
-      )
+        `;
+      })
       .join("");
 
     promoEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
@@ -341,7 +477,7 @@
           <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
         </div>
         <div class="muted">
-          ${escapeHtml(categoryLabel(entry.category))}${entry.subcategory ? ` • ${escapeHtml(titleCase(entry.subcategory))}` : ""}
+          ${escapeHtml(buildEntryMeta(entry))}
         </div>
       `;
       card.addEventListener("click", () => selectEntry(entry));
@@ -369,11 +505,7 @@
           <div class="list-item-title">${escapeHtml(entry.title)}</div>
           <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
         </div>
-        <div class="muted">
-          ${escapeHtml(categoryLabel(entry.category))}
-          ${entry.subcategory ? ` • ${escapeHtml(titleCase(entry.subcategory))}` : ""}
-          ${entry.micron ? ` • ${escapeHtml(entry.micron)}` : ""}
-        </div>
+        <div class="muted">${escapeHtml(buildEntryMeta(entry))}</div>
       `;
 
       item.addEventListener("click", () => selectEntry(entry));
@@ -383,15 +515,18 @@
 
   function clearDetails() {
     if (pokeName) pokeName.textContent = "Sélectionne une fiche";
-    if (pokeId) pokeId.textContent = "—";
+    if (pokeId) pokeId.textContent = "";
     if (pokeType) pokeType.textContent = "—";
     if (pokeThc) pokeThc.textContent = "—";
     if (pokeDesc) pokeDesc.textContent = "—";
+
     if (pokeImg) {
       pokeImg.src = "";
       pokeImg.style.display = "none";
     }
+
     if (placeholder) placeholder.style.display = "block";
+
     if (quantityWrap) {
       quantityWrap.innerHTML = "";
       quantityWrap.style.display = "none";
@@ -402,17 +537,8 @@
     selected = entry;
 
     if (pokeName) pokeName.textContent = entry.title || "—";
-    if (pokeId) pokeId.textContent = entry.id || "—";
-
-    if (pokeType) {
-      const meta = [
-        categoryLabel(entry.category),
-        entry.subcategory ? titleCase(entry.subcategory) : "",
-        entry.micron || "",
-      ].filter(Boolean);
-      pokeType.textContent = meta.join(" • ") || "—";
-    }
-
+    if (pokeId) pokeId.textContent = "";
+    if (pokeType) pokeType.textContent = buildEntryMeta(entry) || "—";
     if (pokeThc) pokeThc.textContent = entryStatusLabel(entry.status);
     if (pokeDesc) pokeDesc.textContent = entry.description || "—";
 
@@ -437,13 +563,21 @@
         quantityWrap.style.display = "grid";
 
         qty.forEach((q) => {
+          const oldPrice = safeStr(q.old_price || q.original_price || "");
+          const promoPrice = safeStr(q.promo_price || q.price || "-");
+
           const card = document.createElement("div");
           card.className = "qty-card";
           card.innerHTML = `
             <div class="qty-top">
               <div class="qty-amount">${escapeHtml(q.amount || "-")}</div>
-              <div class="qty-price">${escapeHtml(q.price || "-")}</div>
+              <div class="qty-price">${escapeHtml(promoPrice)}</div>
             </div>
+            ${
+              oldPrice
+                ? `<div class="qty-desc" style="text-decoration:line-through; opacity:.7; margin-bottom:4px;">Avant : ${escapeHtml(oldPrice)}</div>`
+                : ""
+            }
             <div class="qty-desc">${escapeHtml(q.description || "-")}</div>
           `;
           quantityWrap.appendChild(card);
@@ -455,6 +589,37 @@
   }
 
   /* ================= EVENTS ================= */
+  if (unlockForm) {
+    unlockForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const password = safeStr(unlockPassword?.value || "").trim();
+      if (!password) return;
+
+      if (unlockError) unlockError.style.display = "none";
+      if (unlockButton) unlockButton.disabled = true;
+
+      try {
+        const ok = await unlockApp(password);
+
+        if (!ok) {
+          if (unlockError) unlockError.style.display = "block";
+          if (unlockPassword) unlockPassword.value = "";
+          return;
+        }
+
+        saveAccess();
+        showApp();
+        await loadEntries();
+      } catch (e2) {
+        console.error(e2);
+        toast("Erreur vérification mot de passe");
+      } finally {
+        if (unlockButton) unlockButton.disabled = false;
+      }
+    });
+  }
+
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       searchQuery = e.target.value;
@@ -523,6 +688,13 @@
 
   /* ================= INIT ================= */
   (async () => {
-    await loadEntries();
+    if (hasAccess()) {
+      showApp();
+      await loadEntries();
+      return;
+    }
+
+    $("lockScreen")?.style.setProperty("display", "flex");
+    $("appShell")?.style.setProperty("display", "none");
   })();
 })();
