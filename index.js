@@ -70,7 +70,7 @@ const STATUS_LABELS = {
 const SUBCATEGORY_PRESETS = {
   weed: [
     "cali",
-    "Canadienne",
+    "canadienne",
     "spain",
     "swiss",
     "greenhouse",
@@ -230,6 +230,23 @@ function prettifySubcategory(value) {
   return safeText(value).replace(/_/g, " ");
 }
 
+function buildEntryNotificationText(entry) {
+  const category = CATEGORY_LABELS[entry.category] || entry.category || "-";
+  const subcategory = entry.subcategory ? prettifySubcategory(entry.subcategory) : "-";
+  const micron = entry.micron || "-";
+
+  return [
+    "🆕 *Nouvelle fiche disponible sur Namek*",
+    "",
+    `*${safeText(entry.title)}*`,
+    `Catégorie : ${safeText(category)}`,
+    `Sous-catégorie : ${safeText(subcategory)}`,
+    `Micron : ${safeText(micron)}`,
+    "",
+    safeText(entry.description || "Aucune description."),
+  ].join("\n");
+}
+
 /* ================== CLAVIERS ================== */
 function categoryKeyboard() {
   return {
@@ -316,6 +333,43 @@ async function dbLogAction(adminTelegramId, action, targetType = "", targetId = 
 }
 
 /* ================== DB ================== */
+async function dbRegisterUser(from) {
+  if (!from?.id) return null;
+
+  try {
+    const { data, error } = await sb
+      .from("namek_users")
+      .upsert(
+        [
+          {
+            telegram_id: Number(from.id),
+            username: safeText(from.username || ""),
+            first_name: safeText(from.first_name || ""),
+          },
+        ],
+        { onConflict: "telegram_id" }
+      )
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error("Erreur register user:", e.message);
+    return null;
+  }
+}
+
+async function dbListUsers() {
+  const { data, error } = await sb
+    .from("namek_users")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
 async function dbListEntries() {
   const { data, error } = await sb
     .from("namek_entries")
@@ -455,6 +509,55 @@ async function dbAddEntry(data) {
   return entry;
 }
 
+/* ================== NOTIFICATIONS ================== */
+async function sendEntryNotificationToUser(telegramId, entry) {
+  const text = buildEntryNotificationText(entry);
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
+    ],
+  };
+
+  if (safeText(entry.image_url)) {
+    try {
+      await bot.sendPhoto(telegramId, entry.image_url, {
+        caption: text,
+        parse_mode: "Markdown",
+        reply_markup: replyMarkup,
+      });
+      return;
+    } catch (e) {
+      console.error(`Erreur sendPhoto pour ${telegramId}:`, e.message);
+    }
+  }
+
+  await bot.sendMessage(telegramId, text, {
+    parse_mode: "Markdown",
+    reply_markup: replyMarkup,
+  });
+}
+
+async function notifyAllUsersNewEntry(entry, excludeTelegramId = 0) {
+  try {
+    const users = await dbListUsers();
+
+    for (const user of users) {
+      const telegramId = Number(user.telegram_id || 0);
+      if (!telegramId) continue;
+      if (excludeTelegramId && telegramId === Number(excludeTelegramId)) continue;
+
+      try {
+        await sendEntryNotificationToUser(telegramId, entry);
+      } catch (e) {
+        console.error(`Erreur notif user ${telegramId}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error("Erreur notification globale :", e.message);
+  }
+}
+
 /* ================== API ================== */
 app.get("/api/namek/entries", async (_req, res) => {
   try {
@@ -562,6 +665,7 @@ function getCommandsText() {
 /* ================== BOT COMMANDS ================== */
 bot.onText(/\/start/, async (msg) => {
   try {
+    await dbRegisterUser(msg.from);
     await sendStartMenu(msg.chat.id, msg.from);
   } catch (e) {
     await bot.sendMessage(msg.chat.id, `❌ Erreur : ${e.message}`);
@@ -953,6 +1057,8 @@ bot.on("message", async (msg) => {
           subcategory: created.subcategory,
           slug: created.slug,
         });
+
+        await notifyAllUsersNewEntry(created, msg.from.id);
 
         return bot.sendMessage(
           chatId,
