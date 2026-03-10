@@ -20,8 +20,12 @@
     toast._t = setTimeout(() => el.style.display = "none", 1600);
   }
 
-  function formatList(arr) {
-    return Array.isArray(arr) && arr.length ? arr.join(", ") : "—";
+  function titleCase(value) {
+    return safeStr(value)
+      .split(" ")
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
 
   function entryStatusLabel(status) {
@@ -32,31 +36,7 @@
   }
 
   function visibleQuantities(entry) {
-    const arr = Array.isArray(entry.quantity_options)
-      ? entry.quantity_options.filter(q => q?.description && q.description !== "-")
-      : [];
-    return arr;
-  }
-
-  function statusPriority(status) {
-    if (status === "mise_en_avant") return 0;
-    if (status === "promotion") return 1;
-    if (status === "nouveaute") return 2;
-    return 3;
-  }
-
-  function titleCase(value) {
-    return safeStr(value)
-      .split(" ")
-      .filter(Boolean)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-
-  function uniqueSorted(arr = []) {
-    return [...new Set(arr.filter(Boolean))].sort((a, b) =>
-      safeStr(a).localeCompare(safeStr(b), "fr", { sensitivity: "base" })
-    );
+    return (entry.quantity_options || []).filter(q => q?.description && q.description !== "-");
   }
 
   /* ================= ELEMENTS ================= */
@@ -81,6 +61,9 @@
   const detailsSkeleton = $("detailsSkeleton");
   const detailsReal = $("detailsReal");
 
+  const newEntries = $("newEntries");
+  const promoEntries = $("promoEntries");
+
   /* ================= STATE ================= */
   let allEntries = [];
   let selected = null;
@@ -92,7 +75,7 @@
 
   /* ================= CONFIG ================= */
   const CATEGORIES = [
-    { value: "", label: "🌍 Toutes les catégories" },
+    { value: "", label: "🌍 Toutes" },
     { value: "weed", label: "🌿 Weed / Flower" },
     { value: "hash", label: "🧱 Hash" },
     { value: "extract", label: "🧪 Extract" },
@@ -134,11 +117,11 @@
     const now = new Date();
     const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
 
-    const newEntries = allEntries.filter(e => new Date(e.created_at) >= oneWeekAgo);
-    const promoEntries = allEntries.filter(e => e.status === "promotion");
+    const newOnes = allEntries.filter(e => new Date(e.created_at) >= oneWeekAgo);
+    const promos = allEntries.filter(e => e.status === "promotion");
 
-    renderSection(newEntries, "newEntries");
-    renderSection(promoEntries, "promoEntries");
+    renderSection(newOnes, "newEntries");
+    renderSection(promos, "promoEntries");
   }
 
   function renderSection(entries, containerId) {
