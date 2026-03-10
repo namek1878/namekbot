@@ -6,99 +6,49 @@
   <title>Namek</title>
 
   <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
-  <link href="/css/styles.css" rel="stylesheet" />
+  <link href="/css/style.css" rel="stylesheet" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <style>
-    /* Ton :root et tous tes styles originaux restent intacts */
-    :root {
-      --namek-sky: #8cffe4;
-      --namek-green: #69ffab;
-      --namek-green-2: #21d27b;
-      --namek-green-3: #0f7a50;
-      --namek-lime: #e2ff69;
-      --namek-cyan: #63ddff;
-      --namek-gold: #ffd25a;
-      --namek-orange: #ff9a3c;
-      --namek-red: #ff6170;
-
-      --bg-1: #02100c;
-      --bg-2: #082319;
-      --bg-3: #04110c;
-
-      --panel: rgba(4, 25, 18, 0.84);
-      --panel-soft: rgba(255, 255, 255, 0.045);
-      --line: rgba(105, 255, 171, 0.16);
-      --line-strong: rgba(105, 255, 171, 0.30);
-
-      --text-main: #effff7;
-      --text-soft: rgba(239, 255, 247, 0.72);
-
-      --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-      --radius-xl: 28px;
-      --radius-lg: 22px;
-      --radius-md: 16px;
-    }
-
-    /* Tous tes styles body, ::before, ::after, navbar, btn, namek-panel, namek-hero, promo-grid, chip-row, etc. restent ici */
-
-    /* Ajouts légers pour Nouveautés / Promotions (style Namek) */
-    .promo-box.new::before {
-      background: radial-gradient(circle, var(--namek-lime) 0%, transparent 70%);
-      opacity: 0.8;
-    }
-
-    .promo-box.promo::before {
-      background: radial-gradient(circle, var(--namek-orange) 0%, transparent 70%);
-      opacity: 0.8;
-    }
-
-    .promo-box {
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .promo-box:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-    }
-
-    /* Recherche + filtres améliorés */
-    #searchInput, #categoryFilter {
-      border-radius: 16px !important;
-      padding: 0.9rem 1.2rem !important;
-      font-size: 1.05rem !important;
-      background: rgba(255,255,255,0.04) !important;
-      border: 1px solid var(--line) !important;
-      color: var(--text-main) !important;
-      transition: all 0.3s;
-    }
-
-    #searchInput:focus, #categoryFilter:focus {
-      border-color: var(--namek-lime) !important;
-      box-shadow: 0 0 0 0.25rem rgba(226,255,105,0.25) !important;
-    }
-
-    .filter-toggle.active {
-      background: linear-gradient(180deg, rgba(105,255,171,.28), rgba(33,210,123,.22)) !important;
-      border-color: var(--namek-lime) !important;
-      box-shadow: 0 0 0 1px rgba(105,255,171,.3);
-      color: black !important;
-    }
-  </style>
 </head>
 
 <body class="bg-dark">
-
   <header class="py-4">
     <div class="container">
       <div class="namek-hero">
         <div class="hero-grid">
-          <h1 class="namek-title">Bienvenue sur la planète Namek</h1>
-          <p class="namek-subtitle">
-            Explore les fiches, filtre par catégorie, découvre les nouveautés,
-            les promotions, et consulte chaque fiche avec son image, sa description
-            et ses pastilles.
-          </p>
+          <div class="hero-left">
+            <div class="hero-badge">🟢 Namek • Dragon Ball Style</div>
+
+            <h1 class="namek-title">
+              Bienvenue sur la planète <span>Namek</span>
+            </h1>
+
+            <p class="namek-subtitle">
+              Explore les fiches, découvre la dernière nouveauté, consulte les promotions
+              actives et filtre facilement par catégorie et sous-catégorie dans un style
+              inspiré de l’univers Dragon Ball Z.
+            </p>
+
+            <div class="hero-chips">
+              <div class="hero-chip">🆕 Nouveautés</div>
+              <div class="hero-chip">🏷️ Promotions</div>
+              <div class="hero-chip">🌿 Catégories rangées</div>
+              <div class="hero-chip">⚡ Style Namek</div>
+            </div>
+          </div>
+
+          <div class="hero-right">
+            <div class="hero-mini">
+              <div class="hero-mini-top">Scanner la planète</div>
+              <strong>Recherche rapide</strong>
+              <p>Par nom, catégorie ou sous-catégorie.</p>
+            </div>
+
+            <div class="hero-mini">
+              <div class="hero-mini-top">Zone spéciale</div>
+              <strong>Nouveauté + Promo</strong>
+              <p>Les blocs vedettes restent visibles dès l’ouverture.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -106,128 +56,138 @@
 
   <main class="py-3">
     <div class="container">
-      <section class="panel active">
-        <div class="row g-4">
-          <div class="col-xl-5">
-            <div class="namek-panel">
-
-              <!-- NOUVEAUTÉS + PROMOTIONS (visibles dès le départ) -->
-              <div class="promo-grid mb-4">
-                <div class="promo-box new">
-                  <div class="promo-top">🆕 Nouveautés</div>
-                  <div class="promo-label">Derniers arrivages</div>
-                  <div class="promo-text">
-                    Les produits fraîchement ajoutés sur la planète Namek
-                  </div>
-                  <div id="newEntries" class="mt-3 d-flex flex-wrap gap-3"></div>
+      <section class="page-grid">
+        <div class="namek-panel">
+          <div class="promo-grid">
+            <div class="spotlight-box new">
+              <div class="spotlight-content">
+                <div class="spotlight-top">🆕 Dernière nouveauté</div>
+                <div class="spotlight-title">Dernier arrivage détecté</div>
+                <div class="spotlight-sub">
+                  Quand tu ajoutes une nouvelle fiche avec le statut <strong>nouveaute</strong>,
+                  ce bloc affiche automatiquement la plus récente.
                 </div>
-
-                <div class="promo-box promo">
-                  <div class="promo-top">🏷️ Promotions</div>
-                  <div class="promo-label">Offres spéciales</div>
-                  <div class="promo-text">
-                    Profitez des fiches en promo avec prix réduits
-                  </div>
-                  <div id="promoEntries" class="mt-3 d-flex flex-wrap gap-3"></div>
+                <div id="newEntries" class="spotlight-empty">
+                  Aucune nouveauté pour le moment.
                 </div>
               </div>
+            </div>
 
-              <!-- Recherche + filtres -->
-              <div class="namek-card mb-3">
-                <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                  <div>
-                    <div class="section-title mb-0">Recherche</div>
-                    <div class="muted">Texte ou catégorie</div>
-                  </div>
-                  <button id="clearBtn" class="btn btn-sm btn-outline-light" type="button">
-                    Effacer
-                  </button>
+            <div class="spotlight-box promo">
+              <div class="spotlight-content">
+                <div class="spotlight-top">🏷️ Promotions actives</div>
+                <div class="spotlight-title">Offres de la planète Namek</div>
+                <div class="spotlight-sub">
+                  Les fiches en promotion s’affichent ici en priorité.
                 </div>
-
-                <div class="mt-3">
-                  <input
-                    id="searchInput"
-                    class="form-control"
-                    type="search"
-                    placeholder="Rechercher une fiche..."
-                    autocomplete="off"
-                  />
+                <div id="promoEntries" class="spotlight-empty">
+                  Aucune promotion active pour le moment.
                 </div>
-
-                <div class="mt-4">
-                  <div class="filter-title">Catégorie</div>
-                  <select id="categoryFilter" class="form-select mt-2">
-                    <option value="">Toutes</option>
-                    <option value="weed">🌿 Weed / Flower</option>
-                    <option value="hash">🧱 Hash</option>
-                    <option value="extract">🧪 Extract</option>
-                    <option value="edible">🍬 Edible</option>
-                    <option value="topical">🧴 Topical</option>
-                  </select>
-                </div>
-
-                <div class="mt-4 chip-row">
-                  <button id="promoToggle" class="chip-btn" type="button">🏷️ Promotions</button>
-                  <button id="newToggle" class="chip-btn" type="button">🆕 Nouveautés</button>
-                </div>
-              </div>
-
-              <!-- Carrousel & Liste -->
-              <div class="namek-mini mb-3">
-                <div class="section-title">Carrousel Namek</div>
-                <div class="muted mb-2">
-                  Les fiches s’afficheront ici avec leur image, leur statut et leurs pastilles.
-                </div>
-                <div id="carouselList"></div>
-              </div>
-
-              <div class="namek-mini">
-                <div class="section-title">Liste des fiches</div>
-                <div id="listSkeleton" class="muted" style="display:none;">Chargement...</div>
-                <div id="list" class="list-group list-group-flush"></div>
               </div>
             </div>
           </div>
 
-          <div class="col-xl-7">
-            <div class="namek-panel">
-              <div id="detailsSkeleton" class="muted" style="display:none;">
-                Chargement de la fiche...
+          <div class="namek-card mb-3">
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+              <div>
+                <div class="section-title">Recherche</div>
+                <div class="muted">Texte, catégorie et sous-catégorie</div>
               </div>
 
-              <div id="detailsReal">
-                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-                  <div>
-                    <div id="pokeId" class="muted small">—</div>
-                    <h2 id="pokeName" class="detail-title">Sélectionne une fiche</h2>
-                    <div id="pokeType" class="detail-meta">—</div>
-                  </div>
+              <button id="clearBtn" class="btn-soft" type="button">
+                Effacer
+              </button>
+            </div>
 
-                  <div id="pokeThc" class="detail-status">—</div>
-                </div>
+            <div class="filter-grid">
+              <div>
+                <div class="filter-title">Recherche texte</div>
+                <input
+                  id="searchInput"
+                  type="search"
+                  placeholder="Rechercher une fiche..."
+                  autocomplete="off"
+                />
+              </div>
 
-                <div class="detail-image-shell mb-3">
-                  <img id="pokeImg" class="detail-image" src="" alt="Fiche Namek" style="display:none;" />
-                  <div id="placeholder" class="text-center muted">
-                    Aucune fiche sélectionnée.
-                  </div>
-                </div>
+              <div>
+                <div class="filter-title">Catégorie</div>
+                <select id="categoryFilter">
+                  <option value="">Toutes</option>
+                  <option value="weed">🌿 Weed</option>
+                  <option value="hash">🟫 Hash</option>
+                  <option value="extract">🧪 Extract</option>
+                  <option value="edible">🍬 Edible</option>
+                  <option value="topical">🧴 Topical</option>
+                  <option value="autre">📦 Autre</option>
+                </select>
+              </div>
 
-                <div class="description-box">
-                  <pre id="pokeDesc">—</pre>
-                </div>
-
-                <div id="quantityWrap"></div>
+              <div>
+                <div class="filter-title">Sous-catégorie</div>
+                <select id="subcategoryFilter">
+                  <option value="">Toutes</option>
+                </select>
               </div>
             </div>
+
+            <div class="chip-row">
+              <button id="promoToggle" class="chip-btn" type="button">🏷️ Promotions</button>
+              <button id="newToggle" class="chip-btn" type="button">🆕 Nouveautés</button>
+            </div>
+          </div>
+
+          <div class="namek-mini mb-3">
+            <div class="section-title">Carrousel Namek</div>
+            <div class="muted mb-2">
+              Les fiches mises en avant, les nouveautés ou les promos apparaissent ici.
+            </div>
+            <div id="carouselList"></div>
+          </div>
+
+          <div class="namek-mini">
+            <div class="section-title">Liste des fiches</div>
+            <div id="listSkeleton" class="muted" style="display:none;">Chargement...</div>
+            <div id="list"></div>
+          </div>
+        </div>
+
+        <div class="namek-panel">
+          <div id="detailsSkeleton" class="muted" style="display:none;">
+            Chargement de la fiche...
+          </div>
+
+          <div id="detailsReal">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+              <div>
+                <div id="pokeId" class="muted small">—</div>
+                <h2 id="pokeName" class="detail-title">Sélectionne une fiche</h2>
+                <div id="pokeType" class="detail-meta">—</div>
+              </div>
+
+              <div id="pokeThc" class="detail-status">—</div>
+            </div>
+
+            <div class="detail-image-shell mb-3">
+              <img id="pokeImg" class="detail-image" src="" alt="Fiche Namek" style="display:none;" />
+              <div id="placeholder" class="text-center muted">
+                Aucune fiche sélectionnée.
+              </div>
+            </div>
+
+            <div class="description-box">
+              <pre id="pokeDesc">—</pre>
+            </div>
+
+            <div id="quantityWrap"></div>
           </div>
         </div>
       </section>
     </div>
   </main>
 
-  <footer class="py-4 footer-bar">
-    <div class="container text-center text-secondary">
+  <footer class="footer-bar">
+    <div class="container">
       Namek © <span id="year"></span>
     </div>
   </footer>

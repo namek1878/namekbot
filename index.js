@@ -4,12 +4,17 @@ const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/ping", (_req, res) => {
+  res.status(200).send("pong");
 });
 
 const PORT = process.env.PORT || 3000;
@@ -19,17 +24,22 @@ const TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 const WEBAPP_URL = process.env.WEBAPP_URL || "https://namekbot.onrender.com";
-const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || '0');
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || "0");
 
 if (!TOKEN) {
   console.error("❌ BOT_TOKEN manquant dans Render.");
   process.exit(1);
 }
 
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+  console.error("❌ SUPABASE_URL ou SUPABASE_SERVICE_ROLE manquant.");
+  process.exit(1);
+}
+
 if (ADMIN_TELEGRAM_ID === 0) {
-  console.warn("⚠️ ADMIN_TELEGRAM_ID non défini dans Render → aucun admin actif.");
+  console.warn("⚠️ ADMIN_TELEGRAM_ID non défini dans Render.");
 } else {
-  console.log(`Admin Telegram ID : ${ADMIN_TELEGRAM_ID}`);
+  console.log(`✅ ADMIN_TELEGRAM_ID chargé : ${ADMIN_TELEGRAM_ID}`);
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
@@ -38,14 +48,101 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-/* ================== ADMIN ================== */
-function isAdmin(from) {
-  return from?.id === ADMIN_TELEGRAM_ID;
-}
+/* ================== CONFIG ================== */
+const QUANTITIES_DEFAULT = ["10g", "25g", "50g", "100g", "200g", "300g", "400g", "500g"];
+
+const CATEGORY_LABELS = {
+  weed: "🌿 Weed",
+  hash: "🟫 Hash",
+  extract: "🧪 Extract",
+  edible: "🍬 Edible",
+  topical: "🧴 Topical",
+  autre: "📦 Autre",
+};
+
+const STATUS_LABELS = {
+  normal: "• Normal",
+  promotion: "🏷️ Promotion",
+  nouveaute: "🆕 Nouveauté",
+  mise_en_avant: "⭐ Mise en avant",
+};
+
+const SUBCATEGORY_PRESETS = {
+  weed: [
+    "cali",
+    "Canadienne",
+    "spain",
+    "swiss",
+    "greenhouse",
+    "outdoor",
+    "small_buds",
+    "trim",
+    "autre",
+  ],
+  hash: [
+    "dry",
+    "semi_dry",
+    "static",
+    "double_static",
+    "frozen_sift",
+    "filtre",
+    "commercial",
+    "premium",
+    "mousseux",
+    "full_melt",
+    "autre",
+  ],
+  extract: [
+    "rosin",
+    "live_rosin",
+    "resin",
+    "live_resin",
+    "wax",
+    "crumble",
+    "shatter",
+    "distillate",
+    "bho",
+    "autre",
+  ],
+  edible: [
+    "gummy",
+    "bonbon",
+    "chocolat",
+    "cookie",
+    "brownie",
+    "boisson",
+    "sirop",
+    "autre",
+  ],
+  topical: [
+    "creme",
+    "huile",
+    "baume",
+    "gel",
+    "savon",
+    "autre",
+  ],
+  autre: [
+    "accessoire",
+    "pack",
+    "promo",
+    "divers",
+    "autre",
+  ],
+};
 
 /* ================== UTILS ================== */
 function safeText(value) {
   return String(value || "").trim();
+}
+
+function slugify(value) {
+  return safeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function cancelButtons() {
@@ -54,85 +151,429 @@ function cancelButtons() {
   };
 }
 
-const QUANTITIES_DEFAULT = ["10g", "25g", "50g", "100g", "200g", "300g", "400g", "500g"];
+function normalizeCategory(value) {
+  const v = safeText(value).toLowerCase();
+  const allowed = ["weed", "hash", "extract", "edible", "topical", "autre"];
 
-/* ================== DB ================== */
-async function dbAddEntry(data) {
-  if (!data.title) throw new Error("Titre obligatoire");
-  if (!["weed", "hash", "extract", "edible", "topical", "autre"].includes(data.category)) {
-    throw new Error("Catégorie invalide");
+  if (!allowed.includes(v)) {
+    throw new Error("Catégorie invalide. Choisis : weed, hash, extract, edible, topical, autre");
   }
 
+  return v;
+}
+
+function normalizeSubcategory(category, value) {
+  const cat = normalizeCategory(category);
+  const v = safeText(value).toLowerCase();
+
+  if (!v || v === "-") return "";
+
+  const allowed = SUBCATEGORY_PRESETS[cat] || [];
+  if (!allowed.includes(v)) {
+    throw new Error(`Sous-catégorie invalide pour ${cat}`);
+  }
+
+  return v;
+}
+
+function normalizeMicron(value) {
+  const v = safeText(value).toLowerCase();
+  if (!v || v === "-") return "";
+  return v;
+}
+
+function normalizeStatus(value) {
+  const v = safeText(value).toLowerCase();
+  const allowed = ["normal", "promotion", "nouveaute", "mise_en_avant"];
+
+  if (!allowed.includes(v)) {
+    throw new Error("Statut invalide");
+  }
+
+  return v;
+}
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || "• Normal";
+}
+
+function parseYesNo(value) {
+  const v = safeText(value).toLowerCase();
+  if (["oui", "o", "yes", "y", "1", "true"].includes(v)) return true;
+  if (["non", "n", "no", "0", "false"].includes(v)) return false;
+  throw new Error("Réponse invalide. Réponds par oui ou non.");
+}
+
+function parseQuantityInput(value) {
+  const text = safeText(value);
+
+  if (!text || text === "-") {
+    return { price: "-", description: "-" };
+  }
+
+  const parts = text.split(" ").map((s) => s.trim()).filter(Boolean);
+  const price = parts.shift() || "-";
+  const description = parts.join(" ") || "-";
+
+  return { price, description };
+}
+
+function makeQuantityOptions(data = {}) {
+  return QUANTITIES_DEFAULT.map((amount, i) => ({
+    amount,
+    price: safeText(data.quantity_options?.[i]?.price || "-"),
+    description: safeText(data.quantity_options?.[i]?.description || "-"),
+  }));
+}
+
+function prettifySubcategory(value) {
+  return safeText(value).replace(/_/g, " ");
+}
+
+/* ================== CLAVIERS ================== */
+function categoryKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: CATEGORY_LABELS.weed, callback_data: "namek_cat_weed" }],
+      [{ text: CATEGORY_LABELS.hash, callback_data: "namek_cat_hash" }],
+      [{ text: CATEGORY_LABELS.extract, callback_data: "namek_cat_extract" }],
+      [{ text: CATEGORY_LABELS.edible, callback_data: "namek_cat_edible" }],
+      [{ text: CATEGORY_LABELS.topical, callback_data: "namek_cat_topical" }],
+      [{ text: CATEGORY_LABELS.autre, callback_data: "namek_cat_autre" }],
+      [{ text: "❌ Annuler", callback_data: "namek_cancel" }],
+    ],
+  };
+}
+
+function subcategoryKeyboard(category) {
+  const cat = normalizeCategory(category);
+  const items = SUBCATEGORY_PRESETS[cat] || [];
+
+  const rows = items.map((item) => [
+    {
+      text: prettifySubcategory(item),
+      callback_data: `namek_sub_${item}`,
+    },
+  ]);
+
+  rows.push([{ text: "— Aucune", callback_data: "namek_sub_none" }]);
+  rows.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+
+  return { inline_keyboard: rows };
+}
+
+function statusKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "• Normal", callback_data: "namek_status_normal" }],
+      [{ text: "🏷️ Promotion", callback_data: "namek_status_promotion" }],
+      [{ text: "🆕 Nouveauté", callback_data: "namek_status_nouveaute" }],
+      [{ text: "⭐ Mise en avant", callback_data: "namek_status_mise_en_avant" }],
+      [{ text: "❌ Annuler", callback_data: "namek_cancel" }],
+    ],
+  };
+}
+
+/* ================== ADMIN ================== */
+async function isAdmin(from) {
+  const telegramId = Number(from?.id || 0);
+  if (!telegramId) return false;
+
+  if (ADMIN_TELEGRAM_ID && telegramId === ADMIN_TELEGRAM_ID) {
+    return true;
+  }
+
+  const { data, error } = await sb
+    .from("namek_admins")
+    .select("telegram_id, active")
+    .eq("telegram_id", telegramId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erreur vérification admin :", error.message);
+    return false;
+  }
+
+  return !!data;
+}
+
+/* ================== LOGS ================== */
+async function dbLogAction(adminTelegramId, action, targetType = "", targetId = "", payload = {}) {
+  try {
+    await sb.from("namek_logs").insert([
+      {
+        admin_telegram_id: adminTelegramId || null,
+        action: safeText(action),
+        target_type: safeText(targetType),
+        target_id: safeText(targetId),
+        payload: payload && typeof payload === "object" ? payload : {},
+      },
+    ]);
+  } catch (e) {
+    console.error("Erreur log action :", e.message);
+  }
+}
+
+/* ================== DB ================== */
+async function dbListEntries() {
+  const { data, error } = await sb
+    .from("namek_entries")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function dbListPublicEntries() {
+  const { data, error } = await sb
+    .from("v_namek_entries")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function dbGetEntryById(id) {
+  const { data, error } = await sb
+    .from("namek_entries")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function dbListPasswords() {
+  const { data, error } = await sb
+    .from("namek_passwords")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function dbAddPassword(password) {
   const payload = {
-    title: data.title,
-    category: data.category,
-    subcategory: data.subcategory || "",
-    micron: data.micron || "",
-    description: data.description || "",
-    image_url: data.image_url || null,
-    quantities: data.quantity_options.map((q, i) => ({
-      amount: QUANTITIES_DEFAULT[i],
-      price: q.price || "-",
-      description: q.note === "-" ? null : q.note || null,
-    })),
-    status: data.status || "normal",
-    is_featured: data.is_featured || false,
-    created_at: new Date().toISOString(),
+    password: safeText(password),
+    active: true,
   };
 
-  const { data: entry, error } = await sb.from("namek_entries").insert(payload).select().single();
+  const { data, error } = await sb
+    .from("namek_passwords")
+    .insert([payload])
+    .select("*")
+    .single();
+
   if (error) throw error;
+  return data;
+}
+
+async function dbDeletePassword(password) {
+  const { error } = await sb
+    .from("namek_passwords")
+    .delete()
+    .eq("password", safeText(password));
+
+  if (error) throw error;
+  return true;
+}
+
+async function dbDeleteEntry(id) {
+  const { error } = await sb
+    .from("namek_entries")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
+  return true;
+}
+
+async function dbUpdateEntry(id, patch) {
+  const payload = {
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await sb
+    .from("namek_entries")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function dbAddEntry(data) {
+  const title = safeText(data.title);
+  if (!title) throw new Error("Titre obligatoire");
+
+  const category = normalizeCategory(data.category);
+  const subcategory = normalizeSubcategory(category, data.subcategory);
+  const micron = normalizeMicron(data.micron);
+  const quantity_options = makeQuantityOptions(data);
+
+  const payload = {
+    title,
+    slug: slugify(title),
+    image_url: safeText(data.image_url || ""),
+    category,
+    subcategory,
+    micron,
+    description: safeText(data.description || ""),
+    thc: safeText(data.thc || ""),
+    advice: safeText(data.advice || ""),
+    terpenes: Array.isArray(data.terpenes) ? data.terpenes : [],
+    aroma: Array.isArray(data.aroma) ? data.aroma : [],
+    effects: Array.isArray(data.effects) ? data.effects : [],
+    status: normalizeStatus(data.status || "normal"),
+    is_featured: Boolean(data.is_featured || false),
+    quantity_options,
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: entry, error } = await sb
+    .from("namek_entries")
+    .insert([payload])
+    .select("*")
+    .single();
+
+  if (error) {
+    if (String(error.message || "").toLowerCase().includes("slug")) {
+      throw new Error("Slug déjà existant. Change le titre.");
+    }
+    throw error;
+  }
+
   return entry;
 }
 
+/* ================== API ================== */
+app.get("/api/namek/entries", async (_req, res) => {
+  try {
+    const rows = await dbListPublicEntries();
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: "db_error", message: e.message });
+  }
+});
+
+app.post("/api/track", async (req, res) => {
+  try {
+    const session_id = safeText(req.body?.session_id || "");
+    const event = safeText(req.body?.event || "");
+    const card_id = safeText(req.body?.card_id || "");
+    const meta = req.body?.meta && typeof req.body.meta === "object" ? req.body.meta : {};
+
+    if (!event) {
+      return res.status(400).json({ error: "missing_event" });
+    }
+
+    const { error } = await sb.from("namek_tracking").insert([
+      {
+        session_id,
+        event,
+        card_id,
+        meta,
+      },
+    ]);
+
+    if (error) throw error;
+
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: "track_error", message: e.message });
+  }
+});
+
 /* ================== MENUS ================== */
 function sendPublicMenu(chatId) {
-  return bot.sendMessage(chatId, "🟢 *Bienvenue sur la planète Namek*\n\nChoisis une action 👇", {
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
-        [{ text: "ℹ️ Informations", callback_data: "namek_info" }],
-        [{ text: "📩 Nous contacter", callback_data: "namek_contact" }],
-        [{ text: "📢 Nous suivre", callback_data: "namek_follow" }],
-      ],
-    },
-  });
+  return bot.sendMessage(
+    chatId,
+    "🟢 *Bienvenue sur la planète Namek*\n\nChoisis une action 👇",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
+          [{ text: "ℹ️ Informations", callback_data: "namek_info" }],
+          [{ text: "📩 Nous contacter", callback_data: "namek_contact" }],
+          [{ text: "📢 Nous suivre", callback_data: "namek_follow" }],
+        ],
+      },
+    }
+  );
 }
 
 function sendAdminMenu(chatId) {
-  return bot.sendMessage(chatId, "🛡️ *Panneau Admin Namek*\n\nGestion sécurisée 👇", {
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "➕ Ajouter une fiche", callback_data: "namek_add_entry" }],
-        [{ text: "✏️ Modifier une fiche", callback_data: "namek_edit_entry" }],
-        [{ text: "🗑️ Supprimer une fiche", callback_data: "namek_delete_entry" }],
-        [{ text: "🔐 Ajouter un mot de passe", callback_data: "namek_add_password" }],
-        [{ text: "❌ Supprimer un mot de passe", callback_data: "namek_delete_password" }],
-        [{ text: "📚 Voir les fiches", callback_data: "namek_list_entries" }],
-        [{ text: "🔑 Voir les mots de passe", callback_data: "namek_list_passwords" }],
-        [{ text: "📘 Liste des commandes", callback_data: "namek_show_commands" }],
-      ],
-    },
-  });
+  return bot.sendMessage(
+    chatId,
+    "🛡️ *Panneau Admin Namek*\n\nGestion sécurisée 👇",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "➕ Ajouter une fiche", callback_data: "namek_add_entry" }],
+          [{ text: "✏️ Modifier une fiche", callback_data: "namek_edit_entry" }],
+          [{ text: "🗑️ Supprimer une fiche", callback_data: "namek_delete_entry" }],
+          [{ text: "🔐 Ajouter un mot de passe", callback_data: "namek_add_password" }],
+          [{ text: "❌ Supprimer un mot de passe", callback_data: "namek_delete_password" }],
+          [{ text: "📚 Voir les fiches", callback_data: "namek_list_entries" }],
+          [{ text: "🔑 Voir les mots de passe", callback_data: "namek_list_passwords" }],
+          [{ text: "📘 Liste des commandes", callback_data: "namek_show_commands" }],
+        ],
+      },
+    }
+  );
 }
 
-async function sendStartMenu(chatId, msg) {
+async function sendStartMenu(chatId, from) {
   await sendPublicMenu(chatId);
-  if (isAdmin(msg.from)) {
+
+  if (await isAdmin(from)) {
     await sendAdminMenu(chatId);
   }
+}
+
+function getCommandsText() {
+  return [
+    "📘 *Liste des commandes Namek*",
+    "",
+    "*/start* — ouvrir le menu",
+    "",
+    "*Admin seulement*",
+    "➕ Ajouter une fiche",
+    "✏️ Modifier une fiche",
+    "🗑️ Supprimer une fiche",
+    "🔐 Ajouter un mot de passe",
+    "❌ Supprimer un mot de passe",
+    "📚 Voir les fiches",
+    "🔑 Voir les mots de passe",
+  ].join("\n");
 }
 
 /* ================== BOT COMMANDS ================== */
 bot.onText(/\/start/, async (msg) => {
   try {
-    await sendStartMenu(msg.chat.id, msg);
+    await sendStartMenu(msg.chat.id, msg.from);
   } catch (e) {
-    await bot.sendMessage(msg.chat.id, `❌ Erreur: ${e.message}`);
+    await bot.sendMessage(msg.chat.id, `❌ Erreur : ${e.message}`);
   }
 });
+
+/* ================== WIZARD ================== */
+const adminWizard = new Map();
+
+function clearWizard(chatId) {
+  adminWizard.delete(chatId);
+}
 
 /* ================== CALLBACKS ================== */
 bot.on("callback_query", async (query) => {
@@ -145,107 +586,334 @@ bot.on("callback_query", async (query) => {
 
   const data = query.data || "";
 
-  // Public
-  if (data === "namek_info") {
-    return bot.sendMessage(chatId, "ℹ️ Informations sur Namek...\n\n(Texte à personnaliser)", {
-      reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] }
-    });
+  try {
+    if (data === "namek_info") {
+      return bot.sendMessage(chatId, "ℹ️ Informations sur Namek...\n\n(Texte à personnaliser)", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]],
+        },
+      });
+    }
+
+    if (data === "namek_contact") {
+      return bot.sendMessage(chatId, "📩 Nous contacter :\nTelegram : @nameksupport\nEmail : contact@namek.ch", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]],
+        },
+      });
+    }
+
+    if (data === "namek_follow") {
+      return bot.sendMessage(chatId, "📢 Nous suivre :\nInstagram : @namek_official\nTelegram : t.me/namekchannel", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]],
+        },
+      });
+    }
+
+    if (data === "namek_back_public") {
+      return sendPublicMenu(chatId);
+    }
+
+    const admin = await isAdmin(query.from);
+    if (!admin) {
+      return bot.sendMessage(chatId, "⛔ Accès réservé aux admins.");
+    }
+
+    if (data === "namek_cancel") {
+      clearWizard(chatId);
+      return bot.sendMessage(chatId, "❌ Action annulée.").then(() => sendStartMenu(chatId, query.from));
+    }
+
+    if (data === "namek_show_commands") {
+      return bot.sendMessage(chatId, getCommandsText(), { parse_mode: "Markdown" });
+    }
+
+    if (data === "namek_list_entries") {
+      const rows = await dbListEntries();
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Aucune fiche.");
+      }
+
+      const text = rows
+        .slice(0, 40)
+        .map((entry) => {
+          const category = CATEGORY_LABELS[entry.category] || entry.category;
+          const subcategory = entry.subcategory ? ` / ${prettifySubcategory(entry.subcategory)}` : "";
+          return `${entry.id} — ${entry.title} — ${category}${subcategory} — ${statusLabel(entry.status)}`;
+        })
+        .join("\n");
+
+      return bot.sendMessage(chatId, `📚 *Fiches*\n\n${text}`, { parse_mode: "Markdown" });
+    }
+
+    if (data === "namek_list_passwords") {
+      const rows = await dbListPasswords();
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Aucun mot de passe.");
+      }
+
+      const text = rows.map((row) => `• ${row.password}`).join("\n");
+      return bot.sendMessage(chatId, `🔑 *Mots de passe*\n\n${text}`, { parse_mode: "Markdown" });
+    }
+
+    if (data === "namek_add_password") {
+      adminWizard.set(chatId, {
+        type: "add_password",
+        step: "password",
+        data: {},
+      });
+
+      return bot.sendMessage(chatId, "🔐 Nouveau mot de passe ?", {
+        reply_markup: cancelButtons(),
+      });
+    }
+
+    if (data === "namek_delete_password") {
+      adminWizard.set(chatId, {
+        type: "delete_password",
+        step: "password",
+        data: {},
+      });
+
+      return bot.sendMessage(chatId, "❌ Mot de passe à supprimer ?", {
+        reply_markup: cancelButtons(),
+      });
+    }
+
+    if (data === "namek_add_entry") {
+      adminWizard.set(chatId, {
+        type: "add_entry",
+        step: "title",
+        data: {
+          status: "normal",
+          is_featured: false,
+          quantity_options: QUANTITIES_DEFAULT.map((amount) => ({
+            amount,
+            price: "-",
+            description: "-",
+          })),
+        },
+      });
+
+      return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/14 — Titre ?", {
+        reply_markup: cancelButtons(),
+      });
+    }
+
+    if (data === "namek_edit_entry") {
+      const rows = await dbListEntries();
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Aucune fiche à modifier.");
+      }
+
+      const keyboard = rows.slice(0, 20).map((entry) => [
+        {
+          text: `✏️ ${entry.title}`,
+          callback_data: `namek_pick_edit_${entry.id}`,
+        },
+      ]);
+
+      keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+
+      return bot.sendMessage(chatId, "Choisis une fiche à modifier :", {
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    }
+
+    if (data.startsWith("namek_pick_edit_")) {
+      const id = data.replace("namek_pick_edit_", "");
+      const entry = await dbGetEntryById(id);
+
+      if (!entry) {
+        return bot.sendMessage(chatId, "❌ Fiche introuvable.");
+      }
+
+      adminWizard.set(chatId, {
+        type: "edit_entry",
+        step: "status",
+        data: {
+          id,
+          title: entry.title,
+        },
+      });
+
+      return bot.sendMessage(chatId, `Modifier *${entry.title}*\n\nChoisis le nouveau statut :`, {
+        parse_mode: "Markdown",
+        reply_markup: statusKeyboard(),
+      });
+    }
+
+    if (data === "namek_delete_entry") {
+      const rows = await dbListEntries();
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
+      }
+
+      const keyboard = rows.slice(0, 20).map((entry) => [
+        {
+          text: `🗑️ ${entry.title}`,
+          callback_data: `namek_delete_entry_id_${entry.id}`,
+        },
+      ]);
+
+      keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+
+      return bot.sendMessage(chatId, "Choisis la fiche à supprimer :", {
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    }
+
+    if (data.startsWith("namek_delete_entry_id_")) {
+      const id = data.replace("namek_delete_entry_id_", "");
+      await dbDeleteEntry(id);
+      await dbLogAction(query.from.id, "delete_entry", "entry", id, {});
+
+      return bot.sendMessage(chatId, "✅ Fiche supprimée.").then(() => sendStartMenu(chatId, query.from));
+    }
+
+    if (data.startsWith("namek_cat_")) {
+      const state = adminWizard.get(chatId);
+      if (!state || state.type !== "add_entry" || state.step !== "category") return;
+
+      const category = data.replace("namek_cat_", "");
+      state.data.category = normalizeCategory(category);
+      state.step = "subcategory";
+      adminWizard.set(chatId, state);
+
+      return bot.sendMessage(chatId, "4/14 — Choisis une sous-catégorie :", {
+        reply_markup: subcategoryKeyboard(state.data.category),
+      });
+    }
+
+    if (data === "namek_sub_none") {
+      const state = adminWizard.get(chatId);
+      if (!state || state.type !== "add_entry" || state.step !== "subcategory") return;
+
+      state.data.subcategory = "";
+      state.step = "micron";
+      adminWizard.set(chatId, state);
+
+      return bot.sendMessage(chatId, "5/14 — Micron ?\n\nExemples : 45u, 73u, full melt\nEnvoie `-` si aucun.", {
+        parse_mode: "Markdown",
+        reply_markup: cancelButtons(),
+      });
+    }
+
+    if (data.startsWith("namek_sub_")) {
+      const state = adminWizard.get(chatId);
+      if (!state || state.type !== "add_entry" || state.step !== "subcategory") return;
+
+      const subcategory = data.replace("namek_sub_", "");
+      state.data.subcategory = normalizeSubcategory(state.data.category, subcategory);
+      state.step = "micron";
+      adminWizard.set(chatId, state);
+
+      return bot.sendMessage(chatId, "5/14 — Micron ?\n\nExemples : 45u, 73u, full melt\nEnvoie `-` si aucun.", {
+        parse_mode: "Markdown",
+        reply_markup: cancelButtons(),
+      });
+    }
+
+    if (data.startsWith("namek_status_")) {
+      const state = adminWizard.get(chatId);
+      if (!state || state.type !== "edit_entry" || state.step !== "status") return;
+
+      const status = data.replace("namek_status_", "");
+      state.data.status = normalizeStatus(status);
+      state.step = "featured";
+      adminWizard.set(chatId, state);
+
+      return bot.sendMessage(chatId, "Mettre aussi la fiche en mise en avant ?\n\nRéponds par `oui` ou `non`.", {
+        parse_mode: "Markdown",
+        reply_markup: cancelButtons(),
+      });
+    }
+  } catch (e) {
+    clearWizard(chatId);
+    return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, query.from));
   }
-
-  if (data === "namek_contact") {
-    return bot.sendMessage(chatId, "📩 Nous contacter :\nTelegram : @nameksupport\nEmail : contact@namek.ch", {
-      reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] }
-    });
-  }
-
-  if (data === "namek_follow") {
-    return bot.sendMessage(chatId, "📢 Nous suivre :\nInstagram : @namek_official\nTelegram : t.me/namekchannel", {
-      reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] }
-    });
-  }
-
-  if (data === "namek_back_public") {
-    return sendPublicMenu(chatId);
-  }
-
-  // Admin only
-  if (!isAdmin(query.from)) return bot.sendMessage(chatId, "⛔ Accès réservé aux admins.");
-
-  if (data === "namek_cancel") {
-    return bot.sendMessage(chatId, "❌ Action annulée.").then(() => sendStartMenu(chatId, query));
-  }
-
-  if (data === "namek_add_entry") {
-    adminWizard.set(chatId, {
-      type: "add_entry",
-      step: "title",
-      data: {
-        quantity_options: QUANTITIES_DEFAULT.map(() => ({ price: "-", note: "-" }))
-      },
-    });
-
-    return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/14 — Titre ?", {
-      reply_markup: cancelButtons(),
-    });
-  }
-
-  // Autres callbacks admin (à compléter si besoin)
 });
 
-/* ================== ADMIN WIZARD ================== */
-const adminWizard = new Map();
-
-function clearWizard(chatId) {
-  adminWizard.delete(chatId);
-}
-
-/* ================== MESSAGE HANDLER (WIZARD) ================== */
+/* ================== MESSAGE HANDLER ================== */
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = safeText(msg.text);
 
-  if (!isAdmin(msg.from)) return;
   if (!text || text.startsWith("/")) return;
 
-  const state = adminWizard.get(chatId);
-  if (!state) return;
-
   try {
+    const admin = await isAdmin(msg.from);
+    if (!admin) return;
+
+    const state = adminWizard.get(chatId);
+    if (!state) return;
+
+    if (state.type === "add_password" && state.step === "password") {
+      const created = await dbAddPassword(text);
+      clearWizard(chatId);
+
+      await dbLogAction(msg.from.id, "add_password", "password", created.id, {
+        password: created.password,
+      });
+
+      return bot.sendMessage(chatId, "✅ Mot de passe ajouté.").then(() => sendStartMenu(chatId, msg.from));
+    }
+
+    if (state.type === "delete_password" && state.step === "password") {
+      await dbDeletePassword(text);
+      clearWizard(chatId);
+
+      await dbLogAction(msg.from.id, "delete_password", "password", text, {
+        password: text,
+      });
+
+      return bot.sendMessage(chatId, "✅ Mot de passe supprimé.").then(() => sendStartMenu(chatId, msg.from));
+    }
+
     if (state.type === "add_entry") {
       if (state.step === "title") {
         state.data.title = text;
+        state.step = "image_url";
+        adminWizard.set(chatId, state);
+
+        return bot.sendMessage(chatId, "2/14 — URL image ?\n\nEnvoie `-` si aucune.", {
+          parse_mode: "Markdown",
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      if (state.step === "image_url") {
+        state.data.image_url = text === "-" ? "" : text;
         state.step = "category";
-        return bot.sendMessage(chatId, "2/14 — Catégorie ? (weed/hash/extract/edible/topical)", {
-          reply_markup: cancelButtons(),
-        });
-      }
+        adminWizard.set(chatId, state);
 
-      if (state.step === "category") {
-        state.data.category = normalizeCategory(text);
-        state.step = "subcategory";
-        return bot.sendMessage(chatId, `3/14 — Sous-catégorie pour ${state.data.category} ? (- pour aucune)`, {
-          reply_markup: cancelButtons(),
-        });
-      }
-
-      if (state.step === "subcategory") {
-        state.data.subcategory = normalizeSubcategory(state.data.category, text);
-        state.step = "micron";
-        return bot.sendMessage(chatId, "4/14 — Micron ? (45u/73u/.../full melt) ou -", {
-          reply_markup: cancelButtons(),
+        return bot.sendMessage(chatId, "3/14 — Choisir catégorie :", {
+          reply_markup: categoryKeyboard(),
         });
       }
 
       if (state.step === "micron") {
-        state.data.micron = text === "-" ? "" : normalizeMicron(text);
+        state.data.micron = normalizeMicron(text);
         state.step = "description";
-        return bot.sendMessage(chatId, "5/14 — Description générale ?", { reply_markup: cancelButtons() });
+        adminWizard.set(chatId, state);
+
+        return bot.sendMessage(chatId, "6/14 — Description générale ?", {
+          reply_markup: cancelButtons(),
+        });
       }
 
       if (state.step === "description") {
         state.data.description = text;
         state.step = "q10";
-        return bot.sendMessage(chatId, "6/14 — Pastille 10g : Prix (ex: 120 CHF) + description ou -", {
+        adminWizard.set(chatId, state);
+
+        return bot.sendMessage(chatId, "7/14 — Pastille 10g : Prix + description, ou `-`", {
+          parse_mode: "Markdown",
           reply_markup: cancelButtons(),
         });
       }
@@ -254,37 +922,76 @@ bot.on("message", async (msg) => {
       const qIndex = qSteps.indexOf(state.step);
 
       if (qIndex !== -1) {
-        const [price, ...noteParts] = text.split(" ").map(s => s.trim());
-        state.data.quantity_options[qIndex].price = price || "-";
-        state.data.quantity_options[qIndex].note = noteParts.join(" ") || "-";
+        const parsed = parseQuantityInput(text);
+
+        state.data.quantity_options[qIndex] = {
+          amount: QUANTITIES_DEFAULT[qIndex],
+          price: parsed.price,
+          description: parsed.description,
+        };
 
         if (qIndex < qSteps.length - 1) {
           state.step = qSteps[qIndex + 1];
-          return bot.sendMessage(chatId, `${qIndex + 7}/14 — Pastille ${QUANTITIES_DEFAULT[qIndex + 1]} : Prix + desc ou -`, {
-            reply_markup: cancelButtons(),
-          });
+          adminWizard.set(chatId, state);
+
+          return bot.sendMessage(
+            chatId,
+            `${qIndex + 8}/14 — Pastille ${QUANTITIES_DEFAULT[qIndex + 1]} : Prix + description, ou \`-\``,
+            {
+              parse_mode: "Markdown",
+              reply_markup: cancelButtons(),
+            }
+          );
         }
 
-        // Fin → save
         const created = await dbAddEntry(state.data);
         clearWizard(chatId);
 
-        bot.sendMessage(chatId, `✅ Fiche créée !\n\n${created.title} (${created.category})\nID: ${created.id}`, {
-          reply_markup: {
-            inline_keyboard: [[{ text: "Voir dans l’app 🌍", web_app: { url: WEBAPP_URL } }]],
-          },
-        }).then(() => sendStartMenu(chatId, msg));
+        await dbLogAction(msg.from.id, "add_entry", "entry", created.id, {
+          title: created.title,
+          category: created.category,
+          subcategory: created.subcategory,
+          slug: created.slug,
+        });
+
+        return bot.sendMessage(
+          chatId,
+          `✅ Fiche créée !\n\nTitre : ${created.title}\nCatégorie : ${created.category}\nSous-catégorie : ${created.subcategory || "-"}\nID : ${created.id}`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: "Voir dans l’app 🌍", web_app: { url: WEBAPP_URL } }]],
+            },
+          }
+        ).then(() => sendStartMenu(chatId, msg.from));
       }
+    }
+
+    if (state.type === "edit_entry" && state.step === "featured") {
+      const featured = parseYesNo(text);
+
+      const updated = await dbUpdateEntry(state.data.id, {
+        status: state.data.status,
+        is_featured: featured,
+      });
+
+      clearWizard(chatId);
+
+      await dbLogAction(msg.from.id, "update_entry", "entry", updated.id, {
+        status: updated.status,
+        is_featured: updated.is_featured,
+      });
+
+      return bot.sendMessage(chatId, "✅ Fiche modifiée.").then(() => sendStartMenu(chatId, msg.from));
     }
   } catch (e) {
     clearWizard(chatId);
-    bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, msg));
+    return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, msg.from));
   }
 });
 
 /* ================== START ================== */
 app.listen(PORT, () => {
   console.log(`✅ Serveur Namek lancé sur port ${PORT}`);
-  console.log(`WebApp : ${WEBAPP_URL}`);
-  console.log(`Admin Telegram ID (Render) : ${ADMIN_TELEGRAM_ID}`);
+  console.log(`🌍 WebApp : ${WEBAPP_URL}`);
+  console.log("🤖 Bot Telegram lancé");
 });
