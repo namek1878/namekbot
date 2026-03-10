@@ -6,24 +6,52 @@
     tg.expand();
   }
 
-  /* ================= TRACKING (NEW) ================= */
-  function getSessionId() {
-    const k = "poketerps_session_id_v1";
-    let id = null;
-    try {
-      id = localStorage.getItem(k);
-      if (!id) {
-        id =
-          (crypto?.randomUUID?.() ||
-            `${Date.now()}_${Math.random().toString(16).slice(2)}`);
-        localStorage.setItem(k, id);
-      }
-    } catch {
-      id =
-        (crypto?.randomUUID?.() ||
-          `${Date.now()}_${Math.random().toString(16).slice(2)}`);
-    }
-    return id;
+  /* ================= HELPERS ================= */
+  const $ = (id) => document.getElementById(id);
+  const safeStr = (v) => (v == null ? "" : String(v));
+  const norm = (v) => safeStr(v).trim().toLowerCase();
+
+  function toast(msg) {
+    const el = $("toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = "block";
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => {
+      el.style.display = "none";
+    }, 1600);
+  }
+
+  function formatList(arr) {
+    return Array.isArray(arr) && arr.length ? arr.join(", ") : "—";
+  }
+
+  function cardDesc(c) {
+    return c.description ?? c.desc ?? "—";
+  }
+
+  function entryStatusLabel(status) {
+    if (status === "promotion") return "🏷️ Promotion";
+    if (status === "nouveaute") return "🆕 Nouveauté";
+    if (status === "mise_en_avant") return "⭐ Mise en avant";
+    return "• Normal";
+  }
+
+  function visibleQuantities(entry) {
+    const arr = Array.isArray(entry.visible_quantities)
+      ? entry.visible_quantities
+      : Array.isArray(entry.quantity_options)
+      ? entry.quantity_options.filter((q) => q?.note && q.note !== "-")
+      : [];
+
+    return arr;
+  }
+
+  function statusPriority(status) {
+    if (status === "mise_en_avant") return 0;
+    if (status === "promotion") return 1;
+    if (status === "nouveaute") return 2;
+    return 3;
   }
 
   async function track(event, payload = {}) {
@@ -32,126 +60,25 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: getSessionId(),
           event,
           ...payload,
         }),
       });
-    } catch {
-      // silencieux (pas bloquant)
-    }
-  }
-
-  /* ================= FALLBACK (si API KO) ================= */
-  const fallbackPokedex = [
-    {
-      id: 101,
-      name: "Static Hash (exemple)",
-      type: "hash",
-      micron: "90u",
-      weed_kind: null,
-      thc: "THC: 35–55% (exemple)",
-      desc: "Hash sec, texture sableuse, très parfumé.",
-      img: "https://i.imgur.com/0HqWQvH.png",
-      terpenes: ["Myrcene", "Caryophyllene"],
-      aroma: ["Terreux", "Épicé", "Boisé"],
-      effects: ["Relax (ressenti)", "Calme (ressenti)"],
-      advice: "Commence bas. Évite de mélanger. Respecte la législation.",
-    },
-  ];
-
-  /* ================= HELPERS ================= */
-  const $ = (id) => document.getElementById(id);
-
-  const typeLabel = (t) =>
-    ({ hash: "Hash", weed: "Weed", extraction: "Extraction", wpff: "WPFF" }[t] ||
-      t);
-  const weedKindLabel = (k) =>
-    ({ indica: "Indica", sativa: "Sativa", hybrid: "Hybrid" }[k] || k);
-  const formatList = (arr) => (Array.isArray(arr) && arr.length ? arr.join(", ") : "—");
-
-  const safeStr = (v) => (v == null ? "" : String(v));
-  const norm = (v) => safeStr(v).trim().toLowerCase();
-
-  function cardDesc(c) {
-    return c.desc ?? c.description ?? c.profile ?? "—";
-  }
-
-  function parseThcNumber(thcText) {
-    const s = safeStr(thcText);
-    const nums = s.match(/(\d+([.,]\d+)?)/g);
-    if (!nums || !nums.length) return -1;
-    return Math.max(
-      ...nums
-        .map((x) => parseFloat(x.replace(",", ".")))
-        .filter((n) => !Number.isNaN(n))
-    );
-  }
-
-  function toast(msg) {
-    const el = $("toast");
-    if (!el) return;
-    el.textContent = msg;
-    el.style.display = "block";
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => (el.style.display = "none"), 1600);
-  }
-
-  function scrollToDetails() {
-    $("pokeName")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  /* ================= STORAGE ================= */
-  const LS_FAV = "poketerps_favs_v1";
-  const LS_SHINY = "poketerps_shiny_mode_v1";
-  const LS_FEATURED_VIEWS = "poketerps_featured_views_v1";
-
-  function loadFavs() {
-    try {
-      const raw = localStorage.getItem(LS_FAV);
-      const arr = JSON.parse(raw || "[]");
-      return new Set(Array.isArray(arr) ? arr.map(String) : []);
-    } catch {
-      return new Set();
-    }
-  }
-  function saveFavs(set) {
-    try {
-      localStorage.setItem(LS_FAV, JSON.stringify([...set]));
     } catch {}
-  }
-
-  function getFeaturedViews(featuredId) {
-    try {
-      const raw = localStorage.getItem(LS_FEATURED_VIEWS);
-      const obj = JSON.parse(raw || "{}");
-      return Number(obj[String(featuredId)] || 0) || 0;
-    } catch {
-      return 0;
-    }
-  }
-  function incFeaturedViews(featuredId) {
-    try {
-      const raw = localStorage.getItem(LS_FEATURED_VIEWS);
-      const obj = JSON.parse(raw || "{}");
-      const k = String(featuredId);
-      obj[k] = (Number(obj[k] || 0) || 0) + 1;
-      localStorage.setItem(LS_FEATURED_VIEWS, JSON.stringify(obj));
-      return obj[k];
-    } catch {
-      return 0;
-    }
   }
 
   /* ================= ELEMENTS ================= */
   const listEl = $("list");
+  const carouselList = $("carouselList");
   const countBadge = $("countBadge");
-  const favBadge = $("favBadge");
   const searchInput = $("searchInput");
   const clearBtn = $("clearBtn");
   const closeBtn = $("closeBtn");
   const randomBtn = $("randomBtn");
   const shareBtn = $("shareBtn");
+
+  const promoToggle = $("promoToggle");
+  const newToggle = $("newToggle");
 
   const pokeName = $("pokeName");
   const pokeId = $("pokeId");
@@ -160,508 +87,516 @@
   const pokeType = $("pokeType");
   const pokeThc = $("pokeThc");
   const pokeDesc = $("pokeDesc");
+  const quantityWrap = $("quantityWrap");
 
-  const themeBtn = $("themeBtn");
-
-  // featured
-  const featuredBox = $("featuredBox");
-  const featuredImg = $("featuredImg");
-  const featuredTitle = $("featuredTitle");
-  const featuredName = $("featuredName");
-  const featuredMeta = $("featuredMeta");
-  const featuredLine = $("featuredLine");
-  const featuredViewBtn = $("featuredViewBtn");
-  const featuredCount = $("featuredCount");
-  const sparkles = $("sparkles");
-
-  // skeletons
   const listSkeleton = $("listSkeleton");
   const detailsSkeleton = $("detailsSkeleton");
   const detailsReal = $("detailsReal");
 
-  // controls
-  const sortSelect = $("sortSelect");
-  const favToggle = $("favToggle");
-  const favBtn = $("favBtn");
+  const categoryChips = $("categoryChips");
+  const subFilterChips = $("subFilterChips");
 
-  // sub chips
-  const subChips = $("subChips");
-
-  if (!listEl || !countBadge || !searchInput) {
-    console.error("❌ IDs HTML manquants (list, countBadge, searchInput)");
+  if (!countBadge || !searchInput || !listEl) {
+    console.error("❌ IDs HTML manquants pour Namek");
     return;
   }
 
   /* ================= STATE ================= */
-  let activeType = "all";
-  let activeSub = "all";
+  let cards = [];
   let selected = null;
-  let pokedex = [];
-  let featured = null;
 
-  let favs = loadFavs();
-  let favOnly = false;
+  let onlyPromo = false;
+  let onlyNew = false;
 
-  /* ================= UI TOGGLES ================= */
+  let selectedCategory = "all";
+  let selectedSubFilter = "all";
+
+  /* ================= CONFIG UI ================= */
+  const MAIN_CATEGORIES = [
+    { key: "all", label: "🌍 Toutes" },
+    { key: "hash", label: "🟫 Hash" },
+    { key: "weed", label: "🌿 Weed" },
+    { key: "extract", label: "🧪 Extract" },
+    { key: "edible", label: "🍬 Edible" },
+    { key: "topical", label: "🧴 Topical" },
+  ];
+
+  /* ================= LOADING ================= */
   function setLoading(on) {
     if (listSkeleton) listSkeleton.style.display = on ? "block" : "none";
     if (detailsSkeleton) detailsSkeleton.style.display = on ? "block" : "none";
     if (detailsReal) detailsReal.style.display = on ? "none" : "block";
   }
 
-  function updateFavBadge() {
-    if (!favBadge) return;
-    favBadge.textContent = `❤️ ${favs.size}`;
-  }
-
-  function setShinyMode(on) {
-    document.body.classList.toggle("shiny-mode", Boolean(on));
-    if (themeBtn) themeBtn.textContent = on ? "✨ Shiny ON" : "✨ Shiny";
-    try {
-      localStorage.setItem(LS_SHINY, on ? "1" : "0");
-    } catch {}
-  }
-
-  function initShinyMode() {
-    try {
-      const v = localStorage.getItem(LS_SHINY);
-      setShinyMode(v === "1");
-    } catch {
-      setShinyMode(false);
-    }
-  }
-
-  /* ================= SUB CHIPS ================= */
-  const MICRONS = ["120u", "90u", "73u", "45u"];
-  const WEEDKINDS = ["indica", "sativa", "hybrid"];
-
-  function renderSubChips() {
-    if (!subChips) return;
-
-    let items = [];
-    if (activeType === "hash" || activeType === "extraction" || activeType === "wpff") {
-      items = ["all", ...MICRONS];
-    } else if (activeType === "weed") {
-      items = ["all", ...WEEDKINDS];
-    } else {
-      items = [];
-    }
-
-    if (!items.length) {
-      subChips.style.display = "none";
-      subChips.innerHTML = "";
-      activeSub = "all";
-      return;
-    }
-
-    subChips.style.display = "flex";
-    subChips.innerHTML = "";
-
-    items.forEach((v) => {
-      const btn = document.createElement("button");
-      btn.className = "btn btn-sm pill-btn";
-      btn.dataset.sub = v;
-
-      if (v === "all") btn.textContent = "Sous-cat: Tous";
-      else if (WEEDKINDS.includes(v)) btn.textContent = weedKindLabel(v);
-      else btn.textContent = v;
-
-      if (v === activeSub) btn.classList.add("active");
-
-      btn.addEventListener("click", () => {
-        activeSub = v;
-        [...subChips.querySelectorAll("button")].forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        renderList();
-      });
-
-      subChips.appendChild(btn);
-    });
-  }
-
-  /* ================= LOAD FROM API ================= */
+  /* ================= DATA ================= */
   async function loadCards() {
-    const res = await fetch("/api/cards", { cache: "no-store" });
+    const res = await fetch("/api/namek/entries", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    const mapped = (Array.isArray(data) ? data : []).map((c) => ({
-      id: Number(c.id) || c.id,
-      name: c.name || "Sans nom",
-      type: c.type || "hash",
-      micron: c.micron ?? null,
-      weed_kind: c.weed_kind ?? null,
-      thc: c.thc || "—",
+    console.log("Namek API entries =", data);
+
+    cards = (Array.isArray(data) ? data : []).map((c) => ({
+      id: c.id,
+      name: c.title || "Sans nom",
+      category: norm(c.category || "autre"),
+      subcategory: c.subcategory || "",
+      micron: c.micron || "",
+      thc: c.thc || "",
       desc: cardDesc(c),
-      img: c.img || "https://i.imgur.com/0HqWQvH.png",
+      img: c.image_url || "https://i.imgur.com/0HqWQvH.png",
       terpenes: Array.isArray(c.terpenes) ? c.terpenes : [],
       aroma: Array.isArray(c.aroma) ? c.aroma : [],
       effects: Array.isArray(c.effects) ? c.effects : [],
-      advice: c.advice || "Info éducative. Les effets varient selon la personne. Respecte la loi.",
+      advice: c.advice || "",
+      status: c.status || "normal",
       is_featured: Boolean(c.is_featured),
-      featured_title: c.featured_title || null,
+      visible_quantities: Array.isArray(c.visible_quantities) ? c.visible_quantities : [],
+      quantity_options: Array.isArray(c.quantity_options) ? c.quantity_options : [],
     }));
-
-    pokedex = mapped.length ? mapped : fallbackPokedex;
   }
 
-  async function loadFeatured() {
-    try {
-      const res = await fetch("/api/featured", { cache: "no-store" });
-      if (!res.ok) {
-        featured = null;
-        if (featuredBox) featuredBox.style.display = "none";
-        return;
-      }
-      const c = await res.json();
-      if (!c) {
-        featured = null;
-        if (featuredBox) featuredBox.style.display = "none";
-        return;
-      }
+  /* ================= FILTER HELPERS ================= */
+  function getSubFiltersForCategory(category) {
+    if (category === "all") return [];
 
-      featured = {
-        id: Number(c.id) || c.id,
-        name: c.name || "Sans nom",
-        type: c.type || "hash",
-        micron: c.micron ?? null,
-        weed_kind: c.weed_kind ?? null,
-        thc: c.thc || "—",
-        desc: cardDesc(c),
-        img: c.img || "https://i.imgur.com/0HqWQvH.png",
-        terpenes: Array.isArray(c.terpenes) ? c.terpenes : [],
-        aroma: Array.isArray(c.aroma) ? c.aroma : [],
-        effects: Array.isArray(c.effects) ? c.effects : [],
-        advice: c.advice || "Info éducative. Les effets varient selon la personne. Respecte la loi.",
-        featured_title: c.featured_title || "✨ Shiny du moment",
-      };
+    const list = cards.filter((c) => norm(c.category) === norm(category));
 
-      renderFeatured();
-    } catch {
-      featured = null;
-      if (featuredBox) featuredBox.style.display = "none";
+    if (category === "weed") {
+      return [
+        "all",
+        ...new Set(
+          list
+            .map((c) => safeStr(c.subcategory).trim())
+            .filter(Boolean)
+        ),
+      ];
     }
-  }
 
-  /* ================= FEATURED RENDER ================= */
-  function makeSparkles() {
-    if (!sparkles) return;
-    sparkles.innerHTML = "";
-    const pts = [
-      [8, 18],[16, 62],[28, 34],[44, 18],[62, 30],[74, 60],[88, 28]
+    if (category === "hash" || category === "extract") {
+      return [
+        "all",
+        ...new Set(
+          list
+            .map((c) => safeStr(c.micron).trim())
+            .filter(Boolean)
+        ),
+      ];
+    }
+
+    return [
+      "all",
+      ...new Set(
+        list
+          .map((c) => safeStr(c.subcategory).trim())
+          .filter(Boolean)
+      ),
     ];
-    pts.forEach(([x, y], i) => {
-      const s = document.createElement("div");
-      s.className = "sparkle";
-      s.style.left = `${x}%`;
-      s.style.top = `${y}%`;
-      s.style.animationDelay = `${(i * 0.22).toFixed(2)}s`;
-      s.style.opacity = String(0.18 + (i % 3) * 0.12);
-      sparkles.appendChild(s);
-    });
   }
 
-  function featuredMetaText(c) {
-    if (!c) return "—";
-    if (c.type === "weed" && c.weed_kind) return `#${c.id} • ${typeLabel(c.type)} • ${weedKindLabel(c.weed_kind)}`;
-    if (c.type !== "weed" && c.micron) return `#${c.id} • ${typeLabel(c.type)} • ${c.micron}`;
-    return `#${c.id} • ${typeLabel(c.type)}`;
-  }
-
-  function renderFeatured() {
-    if (!featuredBox || !featured) return;
-    featuredBox.style.display = "block";
-
-    makeSparkles();
-
-    if (featuredImg) featuredImg.src = featured.img;
-    if (featuredTitle) featuredTitle.textContent = featured.featured_title || "✨ Shiny du moment";
-    if (featuredName) featuredName.textContent = featured.name;
-    if (featuredMeta) featuredMeta.textContent = featuredMetaText(featured);
-    if (featuredLine) featuredLine.textContent = `🧬 ${cardDesc(featured)}`;
-
-    if (featuredCount) {
-      featuredCount.style.display = "inline-block";
-      featuredCount.textContent = `Rare #${featured.id}`;
-    }
-
-    if (featuredViewBtn) {
-      featuredViewBtn.onclick = () => {
-        // local counter
-        const views = incFeaturedViews(featured.id);
-        toast(`✨ Rare vu (${views})`);
-
-        // server tracking
-        track("view_featured", { card_id: featured.id });
-
-        selectCard(featured, { scroll: true, fromFeatured: true });
-      };
-    }
-  }
-
-  /* ================= FILTERS ================= */
   function matchesQuery(card, q) {
     if (!q) return true;
 
     const hay = [
       card.name,
-      card.type,
+      card.category,
+      card.subcategory,
       card.micron,
-      card.weed_kind,
       card.thc,
-      cardDesc(card),
+      card.desc,
       ...(card.terpenes || []),
       ...(card.aroma || []),
       ...(card.effects || []),
       card.advice,
-    ].map((x) => norm(x)).join(" ");
+      card.status,
+    ]
+      .map((x) => norm(x))
+      .join(" ");
 
     return hay.includes(q);
   }
 
-  function typeOk(card) {
-    return activeType === "all" || norm(card.type) === activeType;
+  function matchesCategory(card) {
+    if (selectedCategory === "all") return true;
+    return norm(card.category) === norm(selectedCategory);
   }
 
-  function subOk(card) {
-    if (activeSub === "all") return true;
+  function matchesSubFilter(card) {
+    if (selectedSubFilter === "all") return true;
 
-    if (activeType === "weed") return norm(card.weed_kind) === activeSub;
-    if (activeType === "hash" || activeType === "extraction" || activeType === "wpff") return norm(card.micron) === activeSub;
+    if (selectedCategory === "weed") {
+      return norm(card.subcategory) === norm(selectedSubFilter);
+    }
 
-    return true;
+    if (selectedCategory === "hash" || selectedCategory === "extract") {
+      return norm(card.micron) === norm(selectedSubFilter);
+    }
+
+    return norm(card.subcategory) === norm(selectedSubFilter);
   }
 
-  function favOk(card) {
-    if (!favOnly) return true;
-    return favs.has(String(card.id));
+  function matchesPromo(card) {
+    if (!onlyPromo) return true;
+    return norm(card.status) === "promotion";
+  }
+
+  function matchesNew(card) {
+    if (!onlyNew) return true;
+    return norm(card.status) === "nouveaute";
   }
 
   function filteredList() {
     const q = norm(searchInput.value);
-    return pokedex.filter((p) => typeOk(p) && subOk(p) && favOk(p) && matchesQuery(p, q));
+
+    return cards
+      .filter(
+        (card) =>
+          matchesQuery(card, q) &&
+          matchesCategory(card) &&
+          matchesSubFilter(card) &&
+          matchesPromo(card) &&
+          matchesNew(card)
+      )
+      .sort((a, b) => {
+        const byStatus = statusPriority(a.status) - statusPriority(b.status);
+        if (byStatus !== 0) return byStatus;
+
+        return safeStr(a.name).localeCompare(safeStr(b.name), "fr", {
+          sensitivity: "base",
+        });
+      });
   }
 
-  /* ================= SORT ================= */
-  function sortCards(arr) {
-    const mode = sortSelect?.value || "new";
-    const out = [...arr];
+  /* ================= CATEGORY BUTTONS ================= */
+  function renderCategoryChips() {
+    if (!categoryChips) return;
 
-    if (mode === "az") {
-      out.sort((a, b) => safeStr(a.name).localeCompare(safeStr(b.name), "fr", { sensitivity: "base" }));
-      return out;
-    }
-    if (mode === "thc") {
-      out.sort((a, b) => parseThcNumber(b.thc) - parseThcNumber(a.thc));
-      return out;
-    }
+    categoryChips.innerHTML = "";
 
-    out.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
-    return out;
+    MAIN_CATEGORIES.forEach((cat) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip-btn";
+      btn.textContent = cat.label;
+
+      if (selectedCategory === cat.key) {
+        btn.classList.add("active");
+      }
+
+      btn.addEventListener("click", () => {
+        selectedCategory = cat.key;
+        selectedSubFilter = "all";
+        renderCategoryChips();
+        renderSubFilterChips();
+        renderList();
+        track("filter_category", { meta: { category: selectedCategory } });
+      });
+
+      categoryChips.appendChild(btn);
+    });
   }
 
-  /* ================= RENDER LIST ================= */
-  function listMetaLine(p) {
-    if (p.type === "weed" && p.weed_kind) return `${typeLabel(p.type)} • ${weedKindLabel(p.weed_kind)}`;
-    if (p.type !== "weed" && p.micron) return `${typeLabel(p.type)} • ${p.micron}`;
-    return `${typeLabel(p.type)}`;
-  }
+  function renderSubFilterChips() {
+    if (!subFilterChips) return;
 
-  function renderList() {
-    let items = filteredList();
-    items = sortCards(items);
+    subFilterChips.innerHTML = "";
 
-    countBadge.textContent = items.length;
-    listEl.innerHTML = "";
+    const subs = getSubFiltersForCategory(selectedCategory);
 
-    if (!items.length) {
-      listEl.innerHTML = `<div class="text-secondary p-2">Aucun résultat…</div>`;
+    if (!subs.length || selectedCategory === "all") {
+      subFilterChips.style.display = "none";
       return;
     }
 
-    const featuredId = featured ? String(featured.id) : null;
+    subFilterChips.style.display = "flex";
 
-    items.forEach((p) => {
+    subs.forEach((sub) => {
       const btn = document.createElement("button");
-      btn.className =
-        "list-group-item list-group-item-action bg-black text-white border-secondary d-flex align-items-center gap-2 rounded-3 mb-2";
+      btn.type = "button";
+      btn.className = "chip-btn";
+      btn.textContent = sub === "all" ? "Tous" : sub;
 
-      const shinyBadge =
-        featuredId && String(p.id) === featuredId
-          ? `<span class="badge text-bg-warning text-dark ms-2">✨ Shiny</span>`
-          : "";
+      if (selectedSubFilter === sub) {
+        btn.classList.add("active");
+      }
 
-      const favBadgeMini = favs.has(String(p.id))
-        ? `<span class="badge text-bg-warning text-dark ms-2">❤️</span>`
-        : "";
+      btn.addEventListener("click", () => {
+        selectedSubFilter = sub;
+        renderSubFilterChips();
+        renderList();
+        track("filter_sub", { meta: { category: selectedCategory, sub } });
+      });
 
-      btn.innerHTML = `
-        <img src="${p.img}" width="40" height="40" style="object-fit:cover;border-radius:8px;" />
-        <div class="flex-grow-1 text-start">
-          <div class="fw-semibold">${p.name}${shinyBadge}${favBadgeMini}</div>
-          <div class="small text-secondary">#${p.id} • ${listMetaLine(p)}</div>
-        </div>
-        <span class="badge text-bg-danger">Voir</span>
-      `;
-
-      btn.onclick = () => selectCard(p, { scroll: true });
-      listEl.appendChild(btn);
+      subFilterChips.appendChild(btn);
     });
   }
 
-  /* ================= SELECT ================= */
-  function updateFavBtn() {
-    if (!favBtn || !selected) return;
-    const inFav = favs.has(String(selected.id));
-    favBtn.textContent = inFav ? "❤️ Retirer des favoris" : "❤️ Ajouter aux favoris";
+  /* ================= DETAILS ================= */
+  function renderQuantityChips(card) {
+    if (!quantityWrap) return;
+
+    const qty = visibleQuantities(card);
+    quantityWrap.innerHTML = "";
+
+    if (!qty.length) {
+      quantityWrap.style.display = "none";
+      return;
+    }
+
+    quantityWrap.style.display = "flex";
+    quantityWrap.style.flexWrap = "wrap";
+    quantityWrap.style.gap = "8px";
+
+    qty.forEach((q) => {
+      const box = document.createElement("div");
+      box.style.display = "flex";
+      box.style.flexDirection = "column";
+      box.style.alignItems = "center";
+      box.style.gap = "4px";
+      box.style.padding = "6px 8px";
+      box.style.border = "1px solid rgba(114,255,181,.16)";
+      box.style.borderRadius = "14px";
+      box.style.background = "rgba(255,255,255,.04)";
+
+      const chip = document.createElement("div");
+      chip.textContent = q.amount;
+      chip.style.padding = "4px 10px";
+      chip.style.borderRadius = "999px";
+      chip.style.background = "rgba(255,255,255,.06)";
+      chip.style.border = "1px solid rgba(255,255,255,.12)";
+      chip.style.fontSize = "12px";
+      chip.style.fontWeight = "700";
+
+      const note = document.createElement("div");
+      note.textContent = q.note;
+      note.style.fontSize = "11px";
+      note.style.opacity = "0.85";
+      note.style.textAlign = "center";
+      note.style.maxWidth = "110px";
+
+      box.appendChild(chip);
+      box.appendChild(note);
+      quantityWrap.appendChild(box);
+    });
   }
 
-  function selectCard(p, opts = {}) {
-    selected = p;
+  function selectCard(card, opts = {}) {
+    selected = card;
 
-    if (pokeName) pokeName.textContent = p.name;
-    if (pokeId) pokeId.textContent = `#${p.id}`;
+    if (pokeName) pokeName.textContent = card.name;
+    if (pokeId) pokeId.textContent = `${card.id}`;
+    if (pokeType) {
+      pokeType.textContent =
+        `${card.category || "—"}` +
+        `${card.subcategory ? ` • ${card.subcategory}` : ""}` +
+        `${card.micron ? ` • ${card.micron}` : ""}`;
+    }
 
-    const cat = listMetaLine(p);
-    if (pokeType) pokeType.textContent = cat;
-
-    if (pokeThc) pokeThc.textContent = p.thc;
+    if (pokeThc) {
+      pokeThc.textContent = entryStatusLabel(card.status);
+    }
 
     if (pokeDesc) {
-      const line1 = `🧬 Profil: ${cardDesc(p) || "—"}`;
-      const line2 = `🌿 Terpènes: ${formatList(p.terpenes)}`;
-      const line3 = `👃 Arômes: ${formatList(p.aroma)}`;
-      const line4 = `🧠 Effets (ressenti): ${formatList(p.effects)}`;
-      const line5 = `⚠️ Conseils: ${p.advice || "—"}`;
+      const lines = [
+        `📝 Description: ${card.desc || "—"}`,
+        `🏷️ Statut: ${entryStatusLabel(card.status)}`,
+        `🌿 Catégorie: ${card.category || "—"}`,
+        card.subcategory ? `📂 Sous-catégorie: ${card.subcategory}` : null,
+        card.micron ? `🔬 Micron: ${card.micron}` : null,
+        `🌿 Terpènes: ${formatList(card.terpenes)}`,
+        `👃 Arômes: ${formatList(card.aroma)}`,
+        `🧠 Effets: ${formatList(card.effects)}`,
+        card.advice ? `⚠️ Conseil: ${card.advice}` : null,
+      ].filter(Boolean);
 
-      pokeDesc.textContent = [line1, "", line2, line3, line4, "", line5].join("\n");
+      pokeDesc.textContent = lines.join("\n");
     }
+
+    renderQuantityChips(card);
 
     if (pokeImg) {
-      pokeImg.src = p.img;
+      pokeImg.src = card.img;
       pokeImg.style.display = "inline-block";
     }
-    if (placeholder) placeholder.style.display = "none";
 
-    updateFavBtn();
+    if (placeholder) {
+      placeholder.style.display = "none";
+    }
 
-    // server tracking
-    track("view_card", { card_id: p.id });
+    track("view_card", { card_id: card.id });
 
-    if (opts.scroll) scrollToDetails();
+    if (opts.scroll) {
+      $("pokeName")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  /* ================= LIST ================= */
+  function createCardButton(card) {
+    const btn = document.createElement("button");
+    btn.className =
+      "list-group-item list-group-item-action bg-black text-white border-secondary d-flex align-items-center gap-2 rounded-3 mb-2";
+
+    const statusBadge =
+      norm(card.status) === "promotion"
+        ? `<span class="badge text-bg-danger ms-2">Promotion</span>`
+        : norm(card.status) === "nouveaute"
+        ? `<span class="badge text-bg-success ms-2">Nouveauté</span>`
+        : norm(card.status) === "mise_en_avant"
+        ? `<span class="badge text-bg-warning text-dark ms-2">Mis en avant</span>`
+        : "";
+
+    btn.innerHTML = `
+      <img src="${card.img}" width="40" height="40" style="object-fit:cover;border-radius:8px;" />
+      <div class="flex-grow-1 text-start">
+        <div class="fw-semibold">${card.name}${statusBadge}</div>
+        <div class="small text-secondary">${card.category || "—"}${card.subcategory ? ` • ${card.subcategory}` : ""}${card.micron ? ` • ${card.micron}` : ""}</div>
+      </div>
+      <span class="badge text-bg-danger">Voir</span>
+    `;
+
+    btn.onclick = () => selectCard(card, { scroll: true });
+    return btn;
+  }
+
+  function createCarouselCard(card) {
+    const item = document.createElement("div");
+    item.className = "namek-carousel-card";
+    item.style.minWidth = "220px";
+    item.style.maxWidth = "220px";
+    item.style.background = "rgba(255,255,255,.04)";
+    item.style.border = "1px solid rgba(114,255,181,.16)";
+    item.style.borderRadius = "14px";
+    item.style.padding = "12px";
+    item.style.color = "#fff";
+    item.style.cursor = "pointer";
+    item.style.flex = "0 0 auto";
+
+    const qty = visibleQuantities(card);
+
+    item.innerHTML = `
+      <img src="${card.img}" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px;" />
+      <div style="font-weight:700;margin-bottom:6px;">${card.name}</div>
+      <div style="font-size:12px;opacity:.8;margin-bottom:6px;">${card.category || "—"}${card.subcategory ? ` • ${card.subcategory}` : ""}${card.micron ? ` • ${card.micron}` : ""}</div>
+      <div style="font-size:12px;margin-bottom:8px;">${entryStatusLabel(card.status)}</div>
+      <div style="font-size:12px;opacity:.9;min-height:36px;">${card.desc || "—"}</div>
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+        ${qty
+          .map(
+            (q) => `
+              <span style="padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font-size:11px;">
+                ${q.amount}
+              </span>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+
+    item.onclick = () => selectCard(card, { scroll: true });
+    return item;
+  }
+
+  function renderList() {
+    const items = filteredList();
+
+    countBadge.textContent = items.length;
+
+    if (listEl) listEl.innerHTML = "";
+    if (carouselList) {
+      carouselList.innerHTML = "";
+      carouselList.style.display = "flex";
+      carouselList.style.gap = "12px";
+      carouselList.style.overflowX = "auto";
+      carouselList.style.padding = "8px 0";
+    }
+
+    if (!items.length) {
+      if (listEl) {
+        listEl.innerHTML = `<div class="text-secondary p-2">Aucun résultat…</div>`;
+      }
+      if (carouselList) {
+        carouselList.innerHTML = `<div style="color:#aaa;padding:8px;">Aucun résultat…</div>`;
+      }
+      return;
+    }
+
+    items.forEach((card) => {
+      if (listEl) listEl.appendChild(createCardButton(card));
+      if (carouselList) carouselList.appendChild(createCarouselCard(card));
+    });
   }
 
   /* ================= EVENTS ================= */
-  searchInput.oninput = renderList;
+  searchInput?.addEventListener("input", () => {
+    renderList();
+    track("search", { meta: { q: searchInput.value } });
+  });
 
   clearBtn?.addEventListener("click", () => {
     searchInput.value = "";
+    selectedCategory = "all";
+    selectedSubFilter = "all";
+    onlyPromo = false;
+    onlyNew = false;
+
+    if (promoToggle) promoToggle.classList.remove("active");
+    if (newToggle) newToggle.classList.remove("active");
+
+    renderCategoryChips();
+    renderSubFilterChips();
     renderList();
-    toast("Recherche effacée");
-    track("search_clear");
+    toast("Filtres effacés");
   });
 
-  document.querySelectorAll(".chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".chip").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      activeType = btn.dataset.type || "all";
-      activeSub = "all";
-      renderSubChips();
-      renderList();
-
-      track("filter_type", { meta: { type: activeType } });
-    });
-  });
-
-  sortSelect?.addEventListener("change", () => {
+  promoToggle?.addEventListener("click", () => {
+    onlyPromo = !onlyPromo;
+    promoToggle.classList.toggle("active", onlyPromo);
     renderList();
-    toast("Tri appliqué");
-    track("sort", { meta: { sort: sortSelect.value } });
+    track("filter_promotion", { meta: { enabled: onlyPromo } });
   });
 
-  favToggle?.addEventListener("click", () => {
-    favOnly = !favOnly;
-    favToggle.classList.toggle("active", favOnly);
-    favToggle.textContent = favOnly ? "❤️ Favoris ON" : "❤️ Favoris";
+  newToggle?.addEventListener("click", () => {
+    onlyNew = !onlyNew;
+    newToggle.classList.toggle("active", onlyNew);
     renderList();
-    track("fav_toggle", { meta: { favOnly } });
-  });
-
-  favBtn?.addEventListener("click", () => {
-    if (!selected) return;
-    const k = String(selected.id);
-
-    const willRemove = favs.has(k);
-
-    if (willRemove) {
-      favs.delete(k);
-      toast("Retiré des favoris");
-    } else {
-      favs.add(k);
-      toast("Ajouté aux favoris");
-    }
-
-    saveFavs(favs);
-    updateFavBadge();
-    updateFavBtn();
-    renderList();
-
-    track(willRemove ? "fav_remove" : "fav_add", { card_id: selected.id });
-  });
-
-  themeBtn?.addEventListener("click", () => {
-    const on = !document.body.classList.contains("shiny-mode");
-    setShinyMode(on);
-    toast(on ? "✨ Shiny ON" : "✨ Shiny OFF");
-    track("theme_toggle", { meta: { on } });
+    track("filter_nouveaute", { meta: { enabled: onlyNew } });
   });
 
   randomBtn?.addEventListener("click", () => {
-    const items = sortCards(filteredList());
+    const items = filteredList();
     if (!items.length) return;
-
-    track("random");
-
-    if (featured && Math.random() < 0.15) {
-      const views = incFeaturedViews(featured.id);
-      toast(`✨ Shiny du moment (${views})`);
-      return selectCard(featured, { scroll: true, fromFeatured: true });
-    }
-
-    selectCard(items[Math.floor(Math.random() * items.length)], { scroll: true });
+    const card = items[Math.floor(Math.random() * items.length)];
+    selectCard(card, { scroll: true });
   });
 
   shareBtn?.addEventListener("click", async () => {
     if (!selected) return;
 
-    track("share", { card_id: selected.id });
+    const qty = visibleQuantities(selected);
 
-    const shareText =
-      `🧬 ${selected.name} (#${selected.id})\n` +
-      `Catégorie: ${listMetaLine(selected)}\n` +
-      `${selected.thc}\n\n` +
-      `🌿 Terpènes: ${formatList(selected.terpenes)}\n` +
-      `👃 Arômes: ${formatList(selected.aroma)}\n` +
-      `🧠 Effets (ressenti): ${formatList(selected.effects)}\n\n` +
-      `🧬 Profil: ${cardDesc(selected)}\n\n` +
-      `⚠️ ${selected.advice || "Info éducative. Les effets varient."}`;
+    const txt = [
+      selected.name,
+      `Catégorie: ${selected.category || "—"}`,
+      selected.subcategory ? `Sous-catégorie: ${selected.subcategory}` : null,
+      selected.micron ? `Micron: ${selected.micron}` : null,
+      `Statut: ${entryStatusLabel(selected.status)}`,
+      `Description: ${selected.desc || "—"}`,
+      qty.length
+        ? `Pastilles: ${qty.map((q) => `${q.amount} (${q.note})`).join(", ")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     try {
-      await navigator.share?.({ text: shareText });
+      await navigator.share?.({ text: txt });
       return;
     } catch {}
 
     try {
-      await navigator.clipboard?.writeText(shareText);
+      await navigator.clipboard?.writeText(txt);
+      toast("Fiche copiée");
     } catch {}
-
-    tg?.showPopup({
-      title: "Partager",
-      message: "Fiche copiée ✅",
-      buttons: [{ type: "ok" }],
-    });
   });
 
   closeBtn?.addEventListener("click", () => {
@@ -671,29 +606,22 @@
 
   /* ================= INIT ================= */
   (async () => {
-    initShinyMode();
-    updateFavBadge();
-
     setLoading(true);
-
-    // NEW: open_app tracking
     track("open_app");
 
     try {
       await loadCards();
+      renderCategoryChips();
+      renderSubFilterChips();
+      renderList();
+
+      const first = filteredList()[0] || cards[0];
+      if (first) {
+        selectCard(first);
+      }
     } catch (e) {
       console.error("❌ loadCards:", e);
-      pokedex = fallbackPokedex;
-    }
-
-    await loadFeatured();
-
-    renderSubChips();
-    renderList();
-
-    if (featured) {
-      const v = getFeaturedViews(featured.id);
-      if (v > 0) toast(`✨ Déjà vu ${v} fois`);
+      toast("Erreur de chargement");
     }
 
     setLoading(false);
