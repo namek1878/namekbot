@@ -39,9 +39,7 @@ const sb = supabaseReady
   : null;
 
 function assertSupabase() {
-  if (!sb) {
-    throw new Error("Supabase non configuré.");
-  }
+  if (!sb) throw new Error("Supabase non configuré.");
 }
 
 const bot = new TelegramBot(TOKEN, { polling: true });
@@ -66,6 +64,128 @@ function slugify(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function normalizeCategory(value) {
+  const v = safeText(value).toLowerCase();
+
+  if (["flower", "weed", "fleur"].includes(v)) return "weed";
+  if (["hash", "hasch", "shit"].includes(v)) return "hash";
+  if (["extract", "extraction", "extracts"].includes(v)) return "extract";
+  if (["edible", "edibles"].includes(v)) return "edible";
+  if (["topical", "topicals"].includes(v)) return "topical";
+
+  return v || "autre";
+}
+
+function normalizeSubcategory(category, value) {
+  const v = safeText(value).toLowerCase();
+  if (!v) return "";
+
+  if (category === "hash") {
+    const map = {
+      iceo: "iceolator",
+      ice: "iceolator",
+      iceolator: "iceolator",
+      frozen: "frozen",
+      static: "static",
+      "double static": "double static",
+      "double-static": "double static",
+      dry: "dry",
+      "dry sift": "dry sift",
+      drysift: "dry sift",
+      mousse: "mousse",
+      wpff: "wpff",
+      resin: "resin",
+      kief: "kief",
+      filtered: "filtered",
+    };
+    return map[v] || v;
+  }
+
+  if (category === "weed") {
+    const map = {
+      indoor: "indoor",
+      outdoor: "outdoor",
+      greenhouse: "greenhouse",
+      cali: "cali",
+      swiss: "swiss",
+      canadian: "canadian",
+      "pre-roll": "pre-roll",
+      preroll: "pre-roll",
+      shake: "shake",
+    };
+    return map[v] || v;
+  }
+
+  if (category === "extract") {
+    const map = {
+      "live resin": "live resin",
+      liveresin: "live resin",
+      "live rosin": "live rosin",
+      liverosin: "live rosin",
+      shatter: "shatter",
+      wax: "wax",
+      budder: "budder",
+      crumble: "crumble",
+      sauce: "sauce",
+      diamonds: "diamonds",
+      vape: "vape",
+      cart: "cart",
+      cartridge: "cart",
+      oil: "oil",
+      tincture: "tincture",
+    };
+    return map[v] || v;
+  }
+
+  if (category === "edible") {
+    const map = {
+      gummies: "gummies",
+      candy: "candy",
+      chocolate: "chocolate",
+      drink: "drink",
+      beverage: "drink",
+      syrup: "syrup",
+      capsule: "capsule",
+      cookie: "cookie",
+      brownie: "brownie",
+    };
+    return map[v] || v;
+  }
+
+  if (category === "topical") {
+    const map = {
+      cream: "cream",
+      ointment: "ointment",
+      balm: "balm",
+      "bath bomb": "bath bomb",
+    };
+    return map[v] || v;
+  }
+
+  return v;
+}
+
+function normalizeMicron(value) {
+  const raw = safeText(value);
+  const v = raw.toLowerCase().replace(/\s+/g, "");
+
+  if (!v) return "";
+
+  const map = {
+    "45u": "45u",
+    "73u": "73u",
+    "90u": "90u",
+    "120u": "120u",
+    "160u": "160u",
+    "190u": "190u",
+    "220u": "220u",
+    fullmelt: "full melt",
+    "full melt": "full melt",
+  };
+
+  return map[v] || raw;
 }
 
 function entryStatusLabel(status) {
@@ -103,7 +223,6 @@ function normalizeQuantityOptions(options = []) {
 
 function getVisibleQuantities(entry) {
   const raw = Array.isArray(entry?.quantity_options) ? entry.quantity_options : [];
-
   return raw.filter((q) => {
     const note = safeText(q?.note);
     return note && note !== "-";
@@ -120,6 +239,7 @@ function buildEntryCaption(entry) {
   return [
     `📌 *${safeText(entry.title)}*`,
     entry.category ? `Catégorie: ${entry.category}` : null,
+    entry.subcategory ? `Sous-catégorie: ${entry.subcategory}` : null,
     entry.micron ? `Micron: ${entry.micron}` : null,
     entry.status ? `Statut: ${entryStatusLabel(entry.status)}` : null,
     entry.description ? `Description: ${entry.description}` : null,
@@ -128,6 +248,16 @@ function buildEntryCaption(entry) {
     .filter(Boolean)
     .join("\n");
 }
+
+const CATEGORY_PRESETS = {
+  weed: ["indoor", "outdoor", "greenhouse", "cali", "swiss", "canadian", "pre-roll", "shake"],
+  hash: ["static", "double static", "dry", "dry sift", "frozen", "iceolator", "wpff", "mousse", "resin", "kief", "filtered"],
+  extract: ["live resin", "live rosin", "shatter", "wax", "budder", "crumble", "sauce", "diamonds", "vape", "cart", "oil", "tincture"],
+  edible: ["gummies", "candy", "chocolate", "drink", "syrup", "capsule", "cookie", "brownie"],
+  topical: ["cream", "ointment", "balm", "bath bomb"],
+};
+
+const MICRON_PRESETS = ["45u", "73u", "90u", "120u", "160u", "190u", "220u", "full melt"];
 
 /* ================== DB HELPERS ================== */
 async function dbListEntries() {
@@ -141,28 +271,23 @@ async function dbListEntries() {
   return data || [];
 }
 
-async function dbGetEntryById(id) {
-  assertSupabase();
-  const { data, error } = await sb
-    .from("namek_entries")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
 async function dbAddEntry(payload) {
   assertSupabase();
+
+  const category = normalizeCategory(payload.category);
+  const subcategory = normalizeSubcategory(category, payload.subcategory || "");
+  const micron = normalizeMicron(payload.micron || "");
 
   const clean = {
     title: safeText(payload.title),
     slug: slugify(payload.title),
     image_url: safeText(payload.image_url),
-    category: safeText(payload.category),
-    micron: safeText(payload.micron),
+    category,
+    subcategory,
+    micron,
     description: safeText(payload.description),
+    thc: safeText(payload.thc || ""),
+    advice: safeText(payload.advice || ""),
     status: safeText(payload.status || "normal"),
     is_featured: Boolean(payload.is_featured || false),
     quantity_options: normalizeQuantityOptions(payload.quantity_options || []),
@@ -189,6 +314,21 @@ async function dbUpdateEntry(id, patch) {
 
   if (patch.title) {
     updatePayload.slug = slugify(patch.title);
+  }
+
+  if (patch.category) {
+    updatePayload.category = normalizeCategory(patch.category);
+  }
+
+  if (patch.subcategory || patch.category) {
+    updatePayload.subcategory = normalizeSubcategory(
+      normalizeCategory(updatePayload.category || patch.category || ""),
+      patch.subcategory || ""
+    );
+  }
+
+  if (patch.micron) {
+    updatePayload.micron = normalizeMicron(patch.micron);
   }
 
   if (patch.quantity_options) {
@@ -263,12 +403,32 @@ app.get("/api/namek/entries", async (req, res) => {
   }
 });
 
-app.get("/api/namek/passwords", async (req, res) => {
+app.post("/api/track", async (req, res) => {
   try {
-    const rows = await dbListPasswords();
-    res.json(rows);
+    assertSupabase();
+
+    const session_id = safeText(req.body?.session_id || "");
+    const event = safeText(req.body?.event || "");
+    const card_id = safeText(req.body?.card_id || "");
+    const meta = req.body?.meta && typeof req.body.meta === "object" ? req.body.meta : {};
+
+    if (!event) {
+      return res.status(400).json({ error: "missing_event" });
+    }
+
+    const { error } = await sb.from("namek_tracking").insert([
+      {
+        session_id,
+        event,
+        card_id,
+        meta,
+      },
+    ]);
+
+    if (error) throw error;
+    res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: "db_error", message: e.message });
+    res.status(500).json({ error: "track_error", message: e.message });
   }
 });
 
@@ -336,76 +496,6 @@ bot.onText(/\/help/, async (msg) => {
 
 bot.onText(/\/commands/, async (msg) => {
   await bot.sendMessage(msg.chat.id, getCommandsText(), { parse_mode: "Markdown" });
-});
-
-bot.onText(/\/entries/, async (msg) => {
-  try {
-    const rows = await dbListEntries();
-
-    if (!rows.length) {
-      return bot.sendMessage(msg.chat.id, "Aucune fiche trouvée.");
-    }
-
-    const text = rows
-      .slice(0, 30)
-      .map((entry) => `${entry.id} — ${entry.title} — ${entryStatusLabel(entry.status)}`)
-      .join("\n");
-
-    return bot.sendMessage(msg.chat.id, `📚 *Fiches disponibles*\n\n${text}`, {
-      parse_mode: "Markdown",
-    });
-  } catch (e) {
-    return bot.sendMessage(msg.chat.id, `❌ Erreur: ${e.message}`);
-  }
-});
-
-bot.onText(/\/passwords/, async (msg) => {
-  if (!isAdminMsg(msg)) {
-    return bot.sendMessage(msg.chat.id, "⛔ Accès refusé.");
-  }
-
-  try {
-    const rows = await dbListPasswords();
-
-    if (!rows.length) {
-      return bot.sendMessage(msg.chat.id, "Aucun mot de passe.");
-    }
-
-    const text = rows.map((row) => `• ${row.password}`).join("\n");
-    return bot.sendMessage(msg.chat.id, `🔑 *Mots de passe*\n\n${text}`, {
-      parse_mode: "Markdown",
-    });
-  } catch (e) {
-    return bot.sendMessage(msg.chat.id, `❌ Erreur: ${e.message}`);
-  }
-});
-
-bot.onText(/\/addpassword (.+)/, async (msg, match) => {
-  if (!isAdminMsg(msg)) {
-    return bot.sendMessage(msg.chat.id, "⛔ Accès refusé.");
-  }
-
-  try {
-    const password = safeText(match[1]);
-    await dbAddPassword(password);
-    return bot.sendMessage(msg.chat.id, `✅ Mot de passe ajouté : ${password}`);
-  } catch (e) {
-    return bot.sendMessage(msg.chat.id, `❌ Erreur: ${e.message}`);
-  }
-});
-
-bot.onText(/\/delpassword (.+)/, async (msg, match) => {
-  if (!isAdminMsg(msg)) {
-    return bot.sendMessage(msg.chat.id, "⛔ Accès refusé.");
-  }
-
-  try {
-    const password = safeText(match[1]);
-    await dbDeletePassword(password);
-    return bot.sendMessage(msg.chat.id, `✅ Mot de passe supprimé : ${password}`);
-  } catch (e) {
-    return bot.sendMessage(msg.chat.id, `❌ Erreur: ${e.message}`);
-  }
 });
 
 /* ================== ADMIN WIZARD ================== */
@@ -542,35 +632,32 @@ bot.on("callback_query", async (query) => {
   }
 
   if (data === "namek_add_entry") {
-  adminWizard.set(chatId, {
-    type: "add_entry",
-    step: "title",
-    data: {
-      quantity_options: [
-        { amount: "10g", note: "-" },
-        { amount: "25g", note: "-" },
-        { amount: "50g", note: "-" },
-        { amount: "100g", note: "-" },
-        { amount: "200g", note: "-" },
-        { amount: "300g", note: "-" },
-        { amount: "400g", note: "-" },
-        { amount: "500g", note: "-" },
-      ],
-    },
-  });
+    adminWizard.set(chatId, {
+      type: "add_entry",
+      step: "title",
+      data: {
+        quantity_options: [
+          { amount: "10g", note: "-" },
+          { amount: "25g", note: "-" },
+          { amount: "50g", note: "-" },
+          { amount: "100g", note: "-" },
+          { amount: "200g", note: "-" },
+          { amount: "300g", note: "-" },
+          { amount: "400g", note: "-" },
+          { amount: "500g", note: "-" },
+        ],
+      },
+    });
 
-  return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/13 — Titre ?", {
-    reply_markup: cancelButtons(),
-  });
-}
+    return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/14 — Titre ?", {
+      reply_markup: cancelButtons(),
+    });
+  }
 
   if (data === "namek_edit_entry") {
     try {
       const rows = await dbListEntries();
-
-      if (!rows.length) {
-        return bot.sendMessage(chatId, "Aucune fiche à modifier.");
-      }
+      if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à modifier.");
 
       const keyboard = rows.slice(0, 20).map((entry) => [
         {
@@ -606,10 +693,7 @@ bot.on("callback_query", async (query) => {
   if (data === "namek_delete_entry") {
     try {
       const rows = await dbListEntries();
-
-      if (!rows.length) {
-        return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
-      }
+      if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
 
       const keyboard = rows.slice(0, 20).map((entry) => [
         {
@@ -673,17 +757,13 @@ bot.on("message", async (msg) => {
     if (state.type === "add_password" && state.step === "password") {
       await dbAddPassword(text);
       clearWizard(chatId);
-      return bot
-        .sendMessage(chatId, "✅ Mot de passe ajouté.")
-        .then(() => sendStartMenu(chatId, msg));
+      return bot.sendMessage(chatId, "✅ Mot de passe ajouté.").then(() => sendStartMenu(chatId, msg));
     }
 
     if (state.type === "delete_password" && state.step === "password") {
       await dbDeletePassword(text);
       clearWizard(chatId);
-      return bot
-        .sendMessage(chatId, "✅ Mot de passe supprimé.")
-        .then(() => sendStartMenu(chatId, msg));
+      return bot.sendMessage(chatId, "✅ Mot de passe supprimé.").then(() => sendStartMenu(chatId, msg));
     }
 
     if (state.type === "add_entry") {
@@ -704,7 +784,7 @@ bot.on("message", async (msg) => {
         state.data.title = text;
         state.step = "image_url";
         adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "2/13 — URL image ?", {
+        return bot.sendMessage(chatId, "2/14 — URL image ?", {
           reply_markup: cancelButtons(),
         });
       }
@@ -713,25 +793,46 @@ bot.on("message", async (msg) => {
         state.data.image_url = text;
         state.step = "category";
         adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "3/13 — Catégorie ?", {
+        return bot.sendMessage(chatId, "3/14 — Catégorie ? (weed, hash, extract, edible, topical)", {
           reply_markup: cancelButtons(),
         });
       }
 
       if (state.step === "category") {
-        state.data.category = text;
+        state.data.category = normalizeCategory(text);
+        state.step = "subcategory";
+        adminWizard.set(chatId, state);
+
+        const category = state.data.category;
+        const presets = CATEGORY_PRESETS[category] || [];
+        const help = presets.length ? `\nExemples: ${presets.join(", ")}` : "";
+
+        return bot.sendMessage(chatId, `4/14 — Sous-catégorie ?${help}`, {
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      if (state.step === "subcategory") {
+        state.data.subcategory = normalizeSubcategory(state.data.category, text);
         state.step = "micron";
         adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "4/13 — Micron ?", {
+
+        const showMicronHelp =
+          state.data.category === "extract" || state.data.category === "hash"
+            ? `\nExemples: ${MICRON_PRESETS.join(", ")}`
+            : "\nMets `-` si aucun.";
+
+        return bot.sendMessage(chatId, `5/14 — Micron ?${showMicronHelp}`, {
+          parse_mode: "Markdown",
           reply_markup: cancelButtons(),
         });
       }
 
       if (state.step === "micron") {
-        state.data.micron = text;
+        state.data.micron = text === "-" ? "" : normalizeMicron(text);
         state.step = "description";
         adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "5/13 — Description générale ?", {
+        return bot.sendMessage(chatId, "6/14 — Description générale ?", {
           reply_markup: cancelButtons(),
         });
       }
@@ -742,7 +843,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "6/13 — Description pour la pastille 10g ? Mets `-` pour ne pas l’afficher.",
+          "7/14 — Description pour la pastille 10g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -756,7 +857,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "7/13 — Description pour la pastille 25g ? Mets `-` pour ne pas l’afficher.",
+          "8/14 — Description pour la pastille 25g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -770,7 +871,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "8/13 — Description pour la pastille 50g ? Mets `-` pour ne pas l’afficher.",
+          "9/14 — Description pour la pastille 50g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -784,7 +885,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "9/13 — Description pour la pastille 100g ? Mets `-` pour ne pas l’afficher.",
+          "10/14 — Description pour la pastille 100g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -798,7 +899,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "10/13 — Description pour la pastille 200g ? Mets `-` pour ne pas l’afficher.",
+          "11/14 — Description pour la pastille 200g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -812,7 +913,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "11/13 — Description pour la pastille 300g ? Mets `-` pour ne pas l’afficher.",
+          "12/14 — Description pour la pastille 300g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -826,7 +927,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "12/13 — Description pour la pastille 400g ? Mets `-` pour ne pas l’afficher.",
+          "13/14 — Description pour la pastille 400g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -840,7 +941,7 @@ bot.on("message", async (msg) => {
         adminWizard.set(chatId, state);
         return bot.sendMessage(
           chatId,
-          "13/13 — Description pour la pastille 500g ? Mets `-` pour ne pas l’afficher.",
+          "14/14 — Description pour la pastille 500g ? Mets `-` pour ne pas l’afficher.",
           {
             parse_mode: "Markdown",
             reply_markup: cancelButtons(),
@@ -856,38 +957,32 @@ bot.on("message", async (msg) => {
         const created = await dbAddEntry(state.data);
         clearWizard(chatId);
 
-        return bot
-          .sendMessage(chatId, `✅ Fiche ajoutée : ${created.title}`)
-          .then(() => sendStartMenu(chatId, msg));
+        return bot.sendMessage(chatId, `✅ Fiche ajoutée : ${created.title}`).then(() =>
+          sendStartMenu(chatId, msg)
+        );
       }
     }
 
-    if (state.type === "edit_entry") {
-      if (state.step === "featured") {
-        const value = text.toLowerCase();
-        const featured = ["oui", "o", "yes", "y"].includes(value);
+    if (state.type === "edit_entry" && state.step === "featured") {
+      const value = text.toLowerCase();
+      const featured = ["oui", "o", "yes", "y"].includes(value);
 
-        const updated = await dbUpdateEntry(state.data.id, {
-          status: state.data.status,
-          is_featured: featured,
-        });
+      const updated = await dbUpdateEntry(state.data.id, {
+        status: state.data.status,
+        is_featured: featured,
+      });
 
-        clearWizard(chatId);
+      clearWizard(chatId);
 
-        return bot
-          .sendMessage(
-            chatId,
-            `✅ Fiche modifiée\n\n${buildEntryCaption(updated)}`,
-            { parse_mode: "Markdown" }
-          )
-          .then(() => sendStartMenu(chatId, msg));
-      }
+      return bot
+        .sendMessage(chatId, `✅ Fiche modifiée\n\n${buildEntryCaption(updated)}`, {
+          parse_mode: "Markdown",
+        })
+        .then(() => sendStartMenu(chatId, msg));
     }
   } catch (e) {
     clearWizard(chatId);
-    return bot
-      .sendMessage(chatId, `❌ Erreur: ${e.message}`)
-      .then(() => sendStartMenu(chatId, msg));
+    return bot.sendMessage(chatId, `❌ Erreur: ${e.message}`).then(() => sendStartMenu(chatId, msg));
   }
 });
 
