@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>Namek</title>
+
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+    <link href="css/styles.css" rel="stylesheet" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+      :root {
+        --namek-green: #6dffb3;
+        --namek-green-2: #2dd881;
+        --namek-bg: #06110d;
+        --namek-bg-2: #0b1f18;
+        --namek-card: rgba(7, 24, 18, 0.88);
+        --namek-line: rgba(109, 255, 179, 0.16);
+        --namek-text: #edfff5;
+        --namek-muted: rgba(237, 255, 245, 0.68);
+      }
+
+      body.bg-dark {
+        background:
+          radial-gradient(circle at 15% 10%, rgba(109, 255, 179, 0.18), transparent 30%),
+          radial-gradient(circle at 85% 10%, rgba(45, 216, 129, 0.12), transparent 28%),
+          radial-gradient(circle at 50% 85%, rgba(90, 180, 255, 0.08), transparent 34%),
+          linear-gradient(180deg, var(--namek-bg), var(--namek-bg-2) 45%, #040b08 100%);
+        color: var(--namek-text);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      body.bg-dark::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.18;
+        background-image:
+          radial-gradient(circle at 20% 10%, rgba(255,255,255,.15) 0 1px, transparent 2px),
+          radial-gradient(circle at 60% 30%, rgba(255,255,255,.10) 0 1px, transparent 2px),
+          radial-gradient(circle at 80% 70%, rgba(255,255,255,.10) 0 1px, transparent 2px);
+        background-size: 320px 320px, 440px 440px, 520px 520px;
+      }
+
+      .panel {
+        display: block;
+      }
+
+      .namek-header,
+      .card-soft,
+      .control-pill,
+      .mini {
+        border: 1px solid var(--namek-line);
+        background: var(--namek-card);
+        border-radius: 18px;
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45);
+      }
+
+      .navbar {
+        background: rgba(0, 0, 0, 0.55) !important;
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--namek-line) !important;
+      }
+
+      .navbar-brand {
+        color: var(--namek-green) !important;
+        font-weight: 900;
+      }
+
+      .namek-lights {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .namek-lights .big,
+      .namek-lights .s {
+        border-radius: 999px;
+        display: inline-block;
+      }
+
+      .namek-lights .big {
+        width: 28px;
+        height: 28px;
+        background: radial-gradient(circle at 35% 35%, #dffff1, #6dffb3 60%, #2dd881);
+        box-shadow: 0 0 16px rgba(109, 255, 179, 0.8);
+      }
+
+      .namek-lights .s {
+        width: 10px;
+        height: 10px;
+      }
+
+      .namek-lights .green {
+        background: #2dd881;
+      }
+
+      .namek-lights .cyan {
+        background: #45d4ff;
+      }
+
+      .namek-lights .lime {
+        background: #c4ff4d;
+      }
+
+      .muted,
+      .text-secondary {
+        color: var(--namek-muted) !important;
+      }
+
+      .btn-outline-warning,
+      .btn-outline-light,
+      .btn-outline-danger,
+      .btn-success {
+        border-radius: 12px;
+      }
+
+      .form-control,
+      .form-select {
+        background: rgba(255, 255, 255, 0.04) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 12px !important;
+      }
+
+      .list-group-item {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border-color: rgba(255, 255, 255, 0.08) !important;
+        color: white !important;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .chip-btn {
+        border: 1px solid var(--namek-line);
+        background: rgba(255, 255, 255, 0.04);
+        color: white;
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-weight: 700;
+      }
+
+      .chip-btn.active {
+        background: rgba(109, 255, 179, 0.15);
+        box-shadow: 0 0 0 1px rgba(109, 255, 179, 0.2), 0 0 20px rgba(109, 255, 179, 0.12);
+      }
+
+      #carouselList {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding: 8px 2px 12px;
+        scrollbar-width: thin;
+      }
+
+      #toast {
+        position: fixed;
+        left: 50%;
+        bottom: 76px;
+        transform: translateX(-50%);
+        padding: 10px 14px;
+        border-radius: 14px;
+        background: rgba(0, 0, 0, 0.76);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: white;
+        display: none;
+        z-index: 9999;
+      }
+
+      #quantityWrap {
+        display: none;
+        margin-top: 14px;
+      }
+
+      .detail-image {
+        width: 100%;
+        max-height: 280px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 1px solid var(--namek-line);
+        background: rgba(255,255,255,.03);
+      }
+
+      .bottom-nav {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.88);
+        border-top: 1px solid var(--namek-line);
+        z-index: 9998;
+        backdrop-filter: blur(12px);
+      }
+
+      .bn-item {
+        border: 1px solid var(--namek-line);
+        background: rgba(255, 255, 255, 0.04);
+        color: white;
+        border-radius: 16px;
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .bn-item.active {
+        background: rgba(109, 255, 179, 0.14);
+      }
+
+      main {
+        padding-bottom: 96px;
+      }
+
+      pre#pokeDesc {
+        white-space: pre-wrap;
+        color: var(--namek-text);
+        font-family: inherit;
+        margin: 0;
+      }
+    </style>
+  </head>
+
+  <body class="bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark">
+      <div class="container">
+        <a class="navbar-brand" href="#">Namek</a>
+
+        <div class="d-flex gap-2">
+          <button id="randomBtn" class="btn btn-sm btn-outline-warning" type="button">🎲 Random</button>
+          <button id="shareBtn" class="btn btn-sm btn-outline-light" type="button">📤 Partager</button>
+          <button id="closeBtn" class="btn btn-sm btn-outline-danger" type="button">Fermer</button>
+        </div>
+      </div>
+    </nav>
+
+    <header class="py-4">
+      <div class="container">
+        <div class="p-3 namek-header">
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="namek-lights">
+              <span class="big"></span>
+              <span class="s green"></span>
+              <span class="s cyan"></span>
+              <span class="s lime"></span>
+            </div>
+
+            <div>
+              <h1 class="h3 mb-1 text-white">Bienvenue sur la planète Namek</h1>
+              <p class="mb-0 text-secondary">
+                Explore les fiches, filtre par catégorie, nouveautés ou promotions.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="py-4">
+      <div class="container">
+        <section class="panel active">
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="card card-soft text-white">
+                <div class="card-body">
+                  <div class="control-pill mb-3">
+                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                      <div>
+                        <div class="muted">Résultats</div>
+                        <div class="h4 fw-bold mb-0"><span id="countBadge">0</span></div>
+                      </div>
+                      <button id="clearBtn" class="btn btn-sm btn-outline-light" type="button">Effacer filtres</button>
+                    </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Recherche texte</label>
+                    <input
+                      id="searchInput"
+                      class="form-control"
+                      type="search"
+                      placeholder="Rechercher une fiche..."
+                      autocomplete="off"
+                    />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Catégorie</label>
+                    <select id="categorySelect" class="form-select">
+                      <option value="all">Toutes les catégories</option>
+                    </select>
+                  </div>
+
+                  <div class="chip-row mb-3">
+                    <button id="promoToggle" class="chip-btn" type="button">🏷️ Promotions</button>
+                    <button id="newToggle" class="chip-btn" type="button">🆕 Nouveautés</button>
+                  </div>
+
+                  <div class="mini mb-3">
+                    <div class="fw-bold mb-2">Carrousel</div>
+                    <div id="carouselList"></div>
+                  </div>
+
+                  <div class="mini">
+                    <div class="fw-bold mb-2">Liste des fiches</div>
+                    <div id="listSkeleton" class="muted" style="display:none;">Chargement...</div>
+                    <div id="list" class="list-group list-group-flush"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-7">
+              <div class="card card-soft text-white">
+                <div class="card-body">
+                  <div id="detailsSkeleton" class="muted" style="display:none;">Chargement de la fiche...</div>
+
+                  <div id="detailsReal">
+                    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
+                      <div>
+                        <div id="pokeId" class="muted small">—</div>
+                        <h2 id="pokeName" class="h3 mb-1">Sélectionne une fiche</h2>
+                        <div id="pokeType" class="muted">—</div>
+                        <div id="pokeThc" class="mt-2">—</div>
+                      </div>
+                    </div>
+
+                    <div class="mb-3">
+                      <img
+                        id="pokeImg"
+                        class="detail-image"
+                        src=""
+                        alt="Fiche Namek"
+                        style="display:none;"
+                      />
+                      <div id="placeholder" class="mini text-center muted">
+                        Aucune fiche sélectionnée.
+                      </div>
+                    </div>
+
+                    <div class="mini">
+                      <pre id="pokeDesc">—</pre>
+                    </div>
+
+                    <div id="quantityWrap"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="py-4 border-top" style="border-color: rgba(109,255,179,.12) !important;">
+      <div class="container text-center text-secondary">
+        Namek © <span id="year"></span>
+      </div>
+    </footer>
+
+    <div id="toast">—</div>
+
+    <nav class="bottom-nav">
+      <button class="bn-item active" type="button">
+        <span class="bn-ico">🌍</span>
+        <span class="bn-txt">Namek</span>
+      </button>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/pokedex.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>
