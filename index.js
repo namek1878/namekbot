@@ -19,7 +19,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 const WEBAPP_URL = process.env.WEBAPP_URL || "https://namekbot.onrender.com";
-const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || '0'); // ← Ton ID depuis Render
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || '0');
 
 if (!TOKEN) {
   console.error("❌ BOT_TOKEN manquant dans Render.");
@@ -28,6 +28,8 @@ if (!TOKEN) {
 
 if (ADMIN_TELEGRAM_ID === 0) {
   console.warn("⚠️ ADMIN_TELEGRAM_ID non défini dans Render → aucun admin actif.");
+} else {
+  console.log(`Admin Telegram ID : ${ADMIN_TELEGRAM_ID}`);
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
@@ -50,6 +52,37 @@ function cancelButtons() {
   return {
     inline_keyboard: [[{ text: "❌ Annuler", callback_data: "namek_cancel" }]],
   };
+}
+
+const QUANTITIES_DEFAULT = ["10g", "25g", "50g", "100g", "200g", "300g", "400g", "500g"];
+
+/* ================== DB ================== */
+async function dbAddEntry(data) {
+  if (!data.title) throw new Error("Titre obligatoire");
+  if (!["weed", "hash", "extract", "edible", "topical", "autre"].includes(data.category)) {
+    throw new Error("Catégorie invalide");
+  }
+
+  const payload = {
+    title: data.title,
+    category: data.category,
+    subcategory: data.subcategory || "",
+    micron: data.micron || "",
+    description: data.description || "",
+    image_url: data.image_url || null,
+    quantities: data.quantity_options.map((q, i) => ({
+      amount: QUANTITIES_DEFAULT[i],
+      price: q.price || "-",
+      description: q.note === "-" ? null : q.note || null,
+    })),
+    status: data.status || "normal",
+    is_featured: data.is_featured || false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { data: entry, error } = await sb.from("namek_entries").insert(payload).select().single();
+  if (error) throw error;
+  return entry;
 }
 
 /* ================== MENUS ================== */
@@ -112,9 +145,9 @@ bot.on("callback_query", async (query) => {
 
   const data = query.data || "";
 
-  // Public panels
+  // Public
   if (data === "namek_info") {
-    return bot.sendMessage(chatId, "ℹ️ Informations sur Namek...\n\n(Texte à personnaliser ici)", {
+    return bot.sendMessage(chatId, "ℹ️ Informations sur Namek...\n\n(Texte à personnaliser)", {
       reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] }
     });
   }
@@ -136,61 +169,116 @@ bot.on("callback_query", async (query) => {
   }
 
   // Admin only
-  if (!isAdmin(query.from)) {
-    return bot.sendMessage(chatId, "⛔ Accès réservé aux admins.");
-  }
+  if (!isAdmin(query.from)) return bot.sendMessage(chatId, "⛔ Accès réservé aux admins.");
 
   if (data === "namek_cancel") {
     return bot.sendMessage(chatId, "❌ Action annulée.").then(() => sendStartMenu(chatId, query));
   }
 
   if (data === "namek_add_entry") {
-    // Lance le wizard d'ajout (placeholder – tu peux remettre tes 14 étapes ici)
-    return bot.sendMessage(chatId, "Lancement du wizard ajout fiche...\n\n1/14 — Titre ?", {
-      reply_markup: cancelButtons()
+    adminWizard.set(chatId, {
+      type: "add_entry",
+      step: "title",
+      data: {
+        quantity_options: QUANTITIES_DEFAULT.map(() => ({ price: "-", note: "-" }))
+      },
+    });
+
+    return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/14 — Titre ?", {
+      reply_markup: cancelButtons(),
     });
   }
 
-  if (data === "namek_edit_entry") {
-    return bot.sendMessage(chatId, "Sélectionne la fiche à modifier (liste à implémenter)", {
-      reply_markup: cancelButtons()
-    });
-  }
+  // Autres callbacks admin (à compléter si besoin)
+});
 
-  if (data === "namek_delete_entry") {
-    return bot.sendMessage(chatId, "Sélectionne la fiche à supprimer (liste à implémenter)", {
-      reply_markup: cancelButtons()
-    });
-  }
+/* ================== ADMIN WIZARD ================== */
+const adminWizard = new Map();
 
-  if (data === "namek_add_password") {
-    return bot.sendMessage(chatId, "Envoie le nouveau mot de passe :", {
-      reply_markup: cancelButtons()
-    });
-  }
+function clearWizard(chatId) {
+  adminWizard.delete(chatId);
+}
 
-  if (data === "namek_delete_password") {
-    return bot.sendMessage(chatId, "Envoie le mot de passe à supprimer :", {
-      reply_markup: cancelButtons()
-    });
-  }
+/* ================== MESSAGE HANDLER (WIZARD) ================== */
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = safeText(msg.text);
 
-  if (data === "namek_list_entries") {
-    return bot.sendMessage(chatId, "Liste des fiches (à implémenter avec dbListEntries)", {
-      reply_markup: cancelButtons()
-    });
-  }
+  if (!isAdmin(msg.from)) return;
+  if (!text || text.startsWith("/")) return;
 
-  if (data === "namek_list_passwords") {
-    return bot.sendMessage(chatId, "Liste des mots de passe (à implémenter avec dbListPasswords)", {
-      reply_markup: cancelButtons()
-    });
-  }
+  const state = adminWizard.get(chatId);
+  if (!state) return;
 
-  if (data === "namek_show_commands") {
-    return bot.sendMessage(chatId, "Liste des commandes disponibles (à implémenter)", {
-      reply_markup: cancelButtons()
-    });
+  try {
+    if (state.type === "add_entry") {
+      if (state.step === "title") {
+        state.data.title = text;
+        state.step = "category";
+        return bot.sendMessage(chatId, "2/14 — Catégorie ? (weed/hash/extract/edible/topical)", {
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      if (state.step === "category") {
+        state.data.category = normalizeCategory(text);
+        state.step = "subcategory";
+        return bot.sendMessage(chatId, `3/14 — Sous-catégorie pour ${state.data.category} ? (- pour aucune)`, {
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      if (state.step === "subcategory") {
+        state.data.subcategory = normalizeSubcategory(state.data.category, text);
+        state.step = "micron";
+        return bot.sendMessage(chatId, "4/14 — Micron ? (45u/73u/.../full melt) ou -", {
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      if (state.step === "micron") {
+        state.data.micron = text === "-" ? "" : normalizeMicron(text);
+        state.step = "description";
+        return bot.sendMessage(chatId, "5/14 — Description générale ?", { reply_markup: cancelButtons() });
+      }
+
+      if (state.step === "description") {
+        state.data.description = text;
+        state.step = "q10";
+        return bot.sendMessage(chatId, "6/14 — Pastille 10g : Prix (ex: 120 CHF) + description ou -", {
+          reply_markup: cancelButtons(),
+        });
+      }
+
+      const qSteps = ["q10", "q25", "q50", "q100", "q200", "q300", "q400", "q500"];
+      const qIndex = qSteps.indexOf(state.step);
+
+      if (qIndex !== -1) {
+        const [price, ...noteParts] = text.split(" ").map(s => s.trim());
+        state.data.quantity_options[qIndex].price = price || "-";
+        state.data.quantity_options[qIndex].note = noteParts.join(" ") || "-";
+
+        if (qIndex < qSteps.length - 1) {
+          state.step = qSteps[qIndex + 1];
+          return bot.sendMessage(chatId, `${qIndex + 7}/14 — Pastille ${QUANTITIES_DEFAULT[qIndex + 1]} : Prix + desc ou -`, {
+            reply_markup: cancelButtons(),
+          });
+        }
+
+        // Fin → save
+        const created = await dbAddEntry(state.data);
+        clearWizard(chatId);
+
+        bot.sendMessage(chatId, `✅ Fiche créée !\n\n${created.title} (${created.category})\nID: ${created.id}`, {
+          reply_markup: {
+            inline_keyboard: [[{ text: "Voir dans l’app 🌍", web_app: { url: WEBAPP_URL } }]],
+          },
+        }).then(() => sendStartMenu(chatId, msg));
+      }
+    }
+  } catch (e) {
+    clearWizard(chatId);
+    bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, msg));
   }
 });
 
@@ -198,5 +286,5 @@ bot.on("callback_query", async (query) => {
 app.listen(PORT, () => {
   console.log(`✅ Serveur Namek lancé sur port ${PORT}`);
   console.log(`WebApp : ${WEBAPP_URL}`);
-  console.log(`Admin Telegram ID : ${ADMIN_TELEGRAM_ID}`);
+  console.log(`Admin Telegram ID (Render) : ${ADMIN_TELEGRAM_ID}`);
 });
