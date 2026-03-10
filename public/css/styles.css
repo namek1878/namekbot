@@ -1,24 +1,35 @@
 /* =========================
-   NAMEK THEME OVERRIDE
-   À COLLER EN BAS DE styles.css
+   NAMEK THEME — VERSION FINALE
+   Optimisé pour mobile, pastilles visibles, Nouveautés/Promos glow
 ========================= */
 
 :root {
-  --namek-green: #72ffb5;
-  --namek-green-2: #2dd881;
-  --namek-cyan: #5fe7ff;
-  --namek-lime: #d4ff57;
-  --namek-bg: #06110d;
-  --namek-bg-2: #0c1f18;
-  --namek-bg-3: #040b08;
-  --namek-card: rgba(9, 26, 19, 0.9);
-  --namek-card-2: rgba(255, 255, 255, 0.04);
-  --namek-line: rgba(114, 255, 181, 0.16);
-  --namek-line-strong: rgba(114, 255, 181, 0.28);
-  --namek-text: #ecfff5;
-  --namek-muted: rgba(236, 255, 245, 0.7);
-  --namek-shadow: 0 16px 42px rgba(0, 0, 0, 0.45);
-  --namek-radius: 18px;
+  --namek-sky: #8cffe4;
+  --namek-green: #69ffab;
+  --namek-green-2: #21d27b;
+  --namek-green-3: #0f7a50;
+  --namek-lime: #e2ff69;
+  --namek-cyan: #63ddff;
+  --namek-gold: #ffd25a;
+  --namek-orange: #ff9a3c;
+  --namek-red: #ff6170;
+
+  --bg-1: #02100c;
+  --bg-2: #082319;
+  --bg-3: #04110c;
+
+  --panel: rgba(4, 25, 18, 0.88);
+  --panel-soft: rgba(255, 255, 255, 0.05);
+  --line: rgba(105, 255, 171, 0.18);
+  --line-strong: rgba(105, 255, 171, 0.32);
+
+  --text-main: #ecfff5;
+  --text-soft: rgba(236, 255, 245, 0.75);
+
+  --shadow: 0 16px 42px rgba(0, 0, 0, 0.48);
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
 }
 
 html,
@@ -28,11 +39,11 @@ body {
 
 body.bg-dark {
   background:
-    radial-gradient(circle at 15% 10%, rgba(114, 255, 181, 0.18), transparent 30%),
-    radial-gradient(circle at 85% 10%, rgba(45, 216, 129, 0.14), transparent 30%),
-    radial-gradient(circle at 50% 85%, rgba(95, 231, 255, 0.08), transparent 32%),
-    linear-gradient(180deg, var(--namek-bg), var(--namek-bg-2) 45%, var(--namek-bg-3) 100%);
-  color: var(--namek-text);
+    radial-gradient(circle at 15% 10%, rgba(105,255,171,.18), transparent 30%),
+    radial-gradient(circle at 85% 10%, rgba(45,216,129,.14), transparent 30%),
+    radial-gradient(circle at 50% 85%, rgba(99,221,255,.08), transparent 32%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2) 45%, var(--bg-3) 100%);
+  color: var(--text-main);
   overflow-x: hidden;
 }
 
@@ -49,33 +60,38 @@ body.bg-dark::before {
   background-size: 320px 320px, 420px 420px, 520px 520px;
 }
 
-body,
-.text-white,
-.text-light {
-  color: var(--namek-text) !important;
-}
-
-.text-secondary,
-.muted,
-.small.text-secondary {
-  color: var(--namek-muted) !important;
+body.bg-dark::after {
+  content: "";
+  position: fixed;
+  left: -10vw;
+  right: -10vw;
+  bottom: -16vh;
+  height: 42vh;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 88%, rgba(190,255,105,.18), transparent 18%),
+    radial-gradient(circle at 28% 96%, rgba(108,255,143,.16), transparent 18%),
+    radial-gradient(circle at 52% 100%, rgba(87,230,132,.18), transparent 20%),
+    radial-gradient(circle at 78% 93%, rgba(188,255,92,.14), transparent 16%),
+    radial-gradient(circle at 92% 100%, rgba(73,214,120,.16), transparent 18%);
+  filter: blur(26px);
+  opacity: 0.95;
 }
 
 /* NAVBAR */
 .navbar,
 .bg-black {
-  background: rgba(0, 0, 0, 0.55) !important;
-  backdrop-filter: blur(12px);
-}
-
-.navbar {
-  border-bottom: 1px solid var(--namek-line) !important;
+  background: rgba(1, 10, 8, 0.76) !important;
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line-strong) !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,.28);
 }
 
 .navbar-brand {
-  color: var(--namek-green) !important;
+  color: var(--namek-lime) !important;
   font-weight: 900;
   letter-spacing: 0.02em;
+  text-shadow: 0 0 14px rgba(226,255,105,.2);
 }
 
 /* CARDS / PANELS */
@@ -84,88 +100,89 @@ body,
 .control-pill,
 .mini,
 .namek-header,
-.pokedex-header {
-  background: var(--namek-card) !important;
-  border: 1px solid var(--namek-line) !important;
-  border-radius: var(--namek-radius) !important;
-  box-shadow: var(--namek-shadow);
+.pokedex-header,
+.namek-panel,
+.namek-card,
+.namek-mini,
+.namek-detail-box,
+.namek-hero {
+  background: var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow);
 }
 
 .card-body {
-  color: var(--namek-text);
+  color: var(--text-main);
 }
 
 .list-group-item {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  color: var(--namek-text) !important;
-  border-radius: 14px !important;
+  background: rgba(255,255,255,0.03) !important;
+  border-color: var(--line) !important;
+  color: var(--text-main) !important;
+  border-radius: 16px !important;
+  transition: background 0.2s;
 }
 
 .list-group-item:hover {
-  background: rgba(114, 255, 181, 0.08) !important;
+  background: rgba(105,255,171,0.08) !important;
 }
 
 /* FORMS */
 .form-control,
 .form-select,
 textarea.form-control {
-  background: rgba(255, 255, 255, 0.04) !important;
-  color: var(--namek-text) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 12px !important;
+  background: rgba(255,255,255,0.04) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  min-height: 48px;
 }
 
 .form-control::placeholder,
 textarea.form-control::placeholder {
-  color: rgba(236, 255, 245, 0.45) !important;
+  color: rgba(236,255,245,0.45) !important;
 }
 
 .form-control:focus,
 .form-select:focus,
 .form-check-input:focus {
   border-color: var(--namek-green) !important;
-  box-shadow: 0 0 0 0.22rem rgba(114, 255, 181, 0.18) !important;
-}
-
-.form-select {
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23bfffe0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  box-shadow: 0 0 0 0.22rem rgba(105,255,171,0.18) !important;
 }
 
 /* BUTTONS */
 .btn {
   border-radius: 12px;
+  font-weight: 900;
 }
 
 .btn-outline-light {
-  color: var(--namek-text) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: var(--text-main) !important;
+  border-color: var(--line) !important;
 }
 
 .btn-outline-light:hover {
   background: rgba(255,255,255,0.08) !important;
-  color: white !important;
 }
 
 .btn-outline-warning {
   color: var(--namek-lime) !important;
-  border-color: rgba(212, 255, 87, 0.3) !important;
+  border-color: rgba(226,255,105,0.3) !important;
 }
 
-.btn-outline-warning:hover,
-.btn-outline-warning:focus {
-  background: rgba(212, 255, 87, 0.14) !important;
-  color: #f6ffcf !important;
+.btn-outline-warning:hover {
+  background: rgba(226,255,105,0.14) !important;
+  box-shadow: 0 0 16px rgba(226,255,105,0.2);
 }
 
 .btn-outline-danger {
   color: #ff9ea8 !important;
-  border-color: rgba(255, 120, 140, 0.3) !important;
+  border-color: rgba(255,97,112,0.3) !important;
 }
 
 .btn-outline-danger:hover {
-  background: rgba(255, 120, 140, 0.12) !important;
-  color: white !important;
+  background: rgba(255,97,112,0.12) !important;
 }
 
 .btn-success,
@@ -173,12 +190,11 @@ textarea.form-control::placeholder {
   background: linear-gradient(180deg, var(--namek-green), var(--namek-green-2)) !important;
   border: none !important;
   color: #032015 !important;
-  font-weight: 800;
 }
 
 .btn-success:hover,
 .btn-primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 
 /* NAMEK LIGHTS */
@@ -202,7 +218,7 @@ textarea.form-control::placeholder {
   width: 28px;
   height: 28px;
   background: radial-gradient(circle at 35% 35%, #eafff5, var(--namek-green) 60%, var(--namek-green-2));
-  box-shadow: 0 0 16px rgba(114, 255, 181, 0.8);
+  box-shadow: 0 0 16px rgba(105,255,171,0.8);
 }
 
 .pokedex-lights .s,
@@ -211,25 +227,17 @@ textarea.form-control::placeholder {
   height: 10px;
 }
 
-.pokedex-lights .red,
-.namek-lights .red {
-  background: #ff6b7a;
-}
-
-.pokedex-lights .yellow,
-.namek-lights .yellow {
-  background: var(--namek-lime);
-}
-
 .pokedex-lights .green,
 .namek-lights .green {
   background: var(--namek-green-2);
 }
 
+.pokedex-lights .cyan,
 .namek-lights .cyan {
   background: var(--namek-cyan);
 }
 
+.pokedex-lights .lime,
 .namek-lights .lime {
   background: var(--namek-lime);
 }
@@ -244,9 +252,9 @@ textarea.form-control::placeholder {
 .chip-btn,
 .pill-btn,
 .control-chip {
-  border: 1px solid var(--namek-line);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--namek-text);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-main);
   border-radius: 999px;
   padding: 10px 14px;
   font-weight: 700;
@@ -256,38 +264,33 @@ textarea.form-control::placeholder {
 .chip-btn:hover,
 .pill-btn:hover {
   background: rgba(255,255,255,0.08);
+  transform: translateY(-1px);
 }
 
 .chip-btn.active,
 .pill-btn.active {
-  background: rgba(114, 255, 181, 0.14);
-  border-color: var(--namek-line-strong);
-  box-shadow: 0 0 0 1px rgba(114,255,181,.12), 0 0 20px rgba(114,255,181,.12);
+  background: rgba(105,255,171,0.14);
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 1px rgba(105,255,171,.12), 0 0 20px rgba(105,255,171,.12);
 }
 
 /* BADGES */
 .badge.text-bg-danger {
-  background: rgba(255, 84, 112, 0.18) !important;
+  background: rgba(255,84,112,0.18) !important;
   color: #ffb6c0 !important;
-  border: 1px solid rgba(255, 84, 112, 0.3);
+  border: 1px solid rgba(255,84,112,0.3);
 }
 
 .badge.text-bg-success {
-  background: rgba(45, 216, 129, 0.18) !important;
+  background: rgba(45,216,129,0.18) !important;
   color: #b8ffd9 !important;
-  border: 1px solid rgba(45, 216, 129, 0.3);
+  border: 1px solid rgba(45,216,129,0.3);
 }
 
 .badge.text-bg-warning {
-  background: rgba(212, 255, 87, 0.18) !important;
+  background: rgba(212,255,87,0.18) !important;
   color: #f4ffbe !important;
-  border: 1px solid rgba(212, 255, 87, 0.3);
-}
-
-.badge.text-bg-light,
-.badge.bg-light {
-  background: rgba(255,255,255,0.1) !important;
-  color: var(--namek-text) !important;
+  border: 1px solid rgba(212,255,87,0.3);
 }
 
 /* DETAIL IMAGE */
@@ -297,30 +300,39 @@ textarea.form-control::placeholder {
   max-height: 280px;
   object-fit: cover;
   border-radius: 16px;
-  border: 1px solid var(--namek-line);
+  border: 1px solid var(--line);
   background: rgba(255,255,255,.03);
 }
 
 /* DESCRIPTION */
 pre#pokeDesc {
   white-space: pre-wrap;
-  color: var(--namek-text);
+  color: var(--text-main);
   font-family: inherit;
   margin: 0;
 }
 
-/* QUANTITY CHIPS */
+/* QUANTITY CHIPS (pastilles boostées) */
 #quantityWrap {
   display: none;
   margin-top: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 #quantityWrap > div {
-  transition: transform 0.15s ease;
+  background: rgba(105,255,171,0.08);
+  border: 1px solid var(--namek-green);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  transition: all 0.2s;
 }
 
 #quantityWrap > div:hover {
-  transform: translateY(-1px);
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(105,255,171,0.4);
 }
 
 /* CAROUSEL */
@@ -337,7 +349,7 @@ pre#pokeDesc {
 }
 
 #carouselList::-webkit-scrollbar-thumb {
-  background: rgba(114,255,181,.22);
+  background: rgba(105,255,171,.22);
   border-radius: 999px;
 }
 
@@ -350,8 +362,8 @@ pre#pokeDesc {
   padding: 10px 14px;
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--namek-text);
+  border: 1px solid var(--line);
+  color: var(--text-main);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
   display: none;
   z-index: 9999;
@@ -359,7 +371,7 @@ pre#pokeDesc {
 
 /* FOOTER / BOTTOM NAV */
 footer {
-  border-top-color: var(--namek-line) !important;
+  border-top-color: var(--line) !important;
 }
 
 .bottom-nav {
@@ -371,16 +383,16 @@ footer {
   justify-content: center;
   gap: 10px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.88);
-  border-top: 1px solid var(--namek-line);
+  background: rgba(2, 8, 7, 0.88);
+  border-top: 1px solid var(--line);
   z-index: 9998;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
 }
 
 .bn-item {
-  border: 1px solid var(--namek-line);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--namek-text);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-main);
   border-radius: 16px;
   padding: 10px 16px;
   display: flex;
@@ -390,36 +402,22 @@ footer {
 }
 
 .bn-item.active {
-  background: rgba(114, 255, 181, 0.14);
-}
-
-/* REMOVE OLD SHASITTER FEEL */
-.border-danger,
-.text-danger,
-.btn-danger,
-.btn-outline-danger,
-.bg-danger {
-  /* on garde les classes bootstrap, mais le rendu devient cohérent avec Namek */
-}
-
-main {
-  padding-bottom: 96px;
+  background: rgba(105,255,171,0.14);
 }
 
 /* RESPONSIVE */
 @media (max-width: 767.98px) {
-  .navbar .container,
-  header .container,
-  main .container,
-  footer .container {
-    padding-left: 14px;
-    padding-right: 14px;
+  .namek-hero {
+    padding: 1rem;
+    min-height: 250px;
   }
 
-  .card-soft,
-  .mini,
-  .control-pill {
-    border-radius: 16px !important;
+  .namek-title {
+    font-size: 2.7rem;
+  }
+
+  .detail-image-shell {
+    min-height: 220px;
   }
 
   #carouselList > * {
