@@ -229,12 +229,24 @@ function parseQuantityInput(value) {
   return { price, description };
 }
 
+function parsePromoPriceInput(value) {
+  const text = safeText(value);
+  if (!text || text === "-") return "";
+  return text;
+}
+
 function makeQuantityOptions(data = {}) {
-  return QUANTITIES_DEFAULT.map((amount, i) => ({
-    amount,
-    price: safeText(data.quantity_options?.[i]?.price || "-"),
-    description: safeText(data.quantity_options?.[i]?.description || "-"),
-  }));
+  return QUANTITIES_DEFAULT.map((amount, i) => {
+    const src = data.quantity_options?.[i] || {};
+
+    return {
+      amount,
+      price: safeText(src.price || "-"),
+      description: safeText(src.description || "-"),
+      original_price: safeText(src.original_price || ""),
+      promo_price: safeText(src.promo_price || ""),
+    };
+  });
 }
 
 function prettifySubcategory(value) {
@@ -419,6 +431,75 @@ async function dbGetEntryById(id) {
     .select("*")
     .eq("id", id)
     .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function dbApplyPromotionPrices(id, promoPrices = []) {
+  const entry = await dbGetEntryById(id);
+  if (!entry) throw new Error("Fiche introuvable.");
+
+  const currentOptions = makeQuantityOptions(entry);
+
+  const updatedOptions = currentOptions.map((q, i) => {
+    const promoPrice = safeText(promoPrices[i] || "");
+
+    if (!promoPrice || promoPrice === "-") {
+      return {
+        ...q,
+        original_price: "",
+        promo_price: "",
+      };
+    }
+
+    return {
+      ...q,
+      original_price: safeText(q.price || ""),
+      promo_price: promoPrice,
+    };
+  });
+
+  const payload = {
+    status: "promotion",
+    quantity_options: updatedOptions,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await sb
+    .from("namek_entries")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+async function dbClearPromotionPrices(id, newStatus = "normal") {
+  const entry = await dbGetEntryById(id);
+  if (!entry) throw new Error("Fiche introuvable.");
+
+  const currentOptions = makeQuantityOptions(entry);
+
+  const cleanedOptions = currentOptions.map((q) => ({
+    ...q,
+    original_price: "",
+    promo_price: "",
+  }));
+
+  const payload = {
+    status: normalizeStatus(newStatus || "normal"),
+    quantity_options: cleanedOptions,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await sb
+    .from("namek_entries")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
 
   if (error) throw error;
   return data;
@@ -953,6 +1034,8 @@ bot.on("callback_query", async (query) => {
             amount,
             price: "-",
             description: "-",
+            original_price: "",
+            promo_price: "",
           })),
         },
       });
@@ -1090,6 +1173,22 @@ bot.on("callback_query", async (query) => {
       pushHistory(chatId, state);
       const status = data.replace("namek_status_", "");
       state.data.status = normalizeStatus(status);
+
+      if (state.data.status === "promotion") {
+        state.data.promo_prices = Array(QUANTITIES_DEFAULT.length).fill("");
+        state.step = "promo_q10";
+        adminWizard.set(chatId, state);
+
+        return bot.sendMessage(
+          chatId,
+          `Prix promo pour ${QUANTITIES_DEFAULT[0]} ?\n\nEnvoie le prix promo ou \`-\` pour aucune promo sur cette quantité.`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: wizardButtons(),
+          }
+        );
+      }
+
       state.step = "featured";
       adminWizard.set(chatId, state);
 
@@ -1219,6 +1318,8 @@ bot.on("message", async (msg) => {
           amount: QUANTITIES_DEFAULT[qIndex],
           price: parsed.price,
           description: parsed.description,
+          original_price: "",
+          promo_price: "",
         };
 
         if (qIndex < qSteps.length - 1) {
@@ -1259,23 +1360,90 @@ bot.on("message", async (msg) => {
       }
     }
 
-    if (state.type === "edit_entry" && state.step === "featured") {
-      const featured = parseYesNo(text);
+    if (state.type === "edit_entry") {
+      const promoSteps = ["promo_q10", "promo_q25", "promo_q50", "promo_q100", "promo_q200", "promo_q300", "promo_q400", "promo_q500"];
+      const promoIndex = promoSteps.indexOf(state.step);
 
-      const updated = await dbUpdateEntry(state.data.id, {
-        status: state.data.status,
-        is_featured: featured,
-      });
+      if (promoIndex !== -1) {
+        pushHistory(chatId, state);
+        state.data.promo_prices[promoIndex] = parsePromoPriceInput(text);
 
-      clearWizard(chatId);
+        if (promoIndex < promoSteps.length - 1) {
+          state.step = promoSteps[promoIndex + 1];
+          adminWizard.set(chatId, state);
 
-      await dbLogAction(msg.from.id, "update_entry", "entry", updated.id, {
-        status: updated.status,
-        is_featured: updated.is_featured,
-      });
+          return bot.sendMessage(
+            chatId,
+            `Prix promo pour ${QUANTITIES_DEFAULT[promoIndex + 1]} ?\n\nEnvoie le prix promo ou \`-\` pour aucune promo sur cette quantité.`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: wizardButtons(),
+            }
+          );
+        }
 
-      return bot.sendMessage(chatId, "✅ Fiche modifiée.").then(() => sendStartMenu(chatId, msg.from));
+        const updated = await dbApplyPromotionPrices(state.data.id, state.data.promo_prices);
+        clearWizard(chatId);
+
+        await dbLogAction(msg.from.id, "apply_promotion_prices", "entry", updated.id, {
+          status: updated.status,
+          promo_prices: state.data.promo_prices,
+        });
+
+        return bot.sendMessage(
+          chatId,
+          `✅ Promotion appliquée.\n\nTitre : ${updated.title}\nStatut : ${updated.status}`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: "Voir dans l’app 🌍", web_app: { url: WEBAPP_URL } }]],
+            },
+          }
+        ).then(() => sendStartMenu(chatId, msg.from));
+      }
     }
+
+    if (state.type === "edit_entry" && state.step === "featured") {
+  const featured = parseYesNo(text);
+
+  let updated;
+
+ if (state.type === "edit_entry" && state.step === "featured") {
+  const featured = parseYesNo(text);
+
+  let updated;
+
+  if (state.data.status === "promotion") {
+    updated = await dbUpdateEntry(state.data.id, {
+      status: state.data.status,
+      is_featured: featured,
+    });
+  } else {
+    const entry = await dbGetEntryById(state.data.id);
+    if (!entry) throw new Error("Fiche introuvable.");
+
+    const currentOptions = makeQuantityOptions(entry);
+    const cleanedOptions = currentOptions.map((q) => ({
+      ...q,
+      original_price: "",
+      promo_price: "",
+    }));
+
+    updated = await dbUpdateEntry(state.data.id, {
+      status: state.data.status,
+      is_featured: featured,
+      quantity_options: cleanedOptions,
+    });
+  }
+
+  clearWizard(chatId);
+
+  await dbLogAction(msg.from.id, "update_entry", "entry", updated.id, {
+    status: updated.status,
+    is_featured: updated.is_featured,
+  });
+
+  return bot.sendMessage(chatId, "✅ Fiche modifiée.").then(() => sendStartMenu(chatId, msg.from));
+}
   } catch (e) {
     clearWizard(chatId);
     return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, msg.from));
