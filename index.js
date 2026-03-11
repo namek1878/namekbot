@@ -145,7 +145,18 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function cancelButtons() {
+function wizardButtons() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "⬅️ Retour", callback_data: "namek_back" },
+        { text: "❌ Annuler", callback_data: "namek_cancel" },
+      ],
+    ],
+  };
+}
+
+function cancelOnlyButtons() {
   return {
     inline_keyboard: [[{ text: "❌ Annuler", callback_data: "namek_cancel" }]],
   };
@@ -244,6 +255,18 @@ function buildEntryNotificationText(entry) {
     `Micron : ${safeText(micron)}`,
     "",
     safeText(entry.description || "Aucune description."),
+  ].join("\n");
+}
+
+function formatUserLine(user) {
+  const firstName = safeText(user.first_name || "-");
+  const username = safeText(user.username || "");
+  const createdAt = user.created_at ? new Date(user.created_at).toLocaleString("fr-CH") : "-";
+
+  return [
+    `• ${firstName}${username ? ` (@${username})` : ""}`,
+    `ID : ${safeText(user.telegram_id)}`,
+    `Arrivé : ${createdAt}`,
   ].join("\n");
 }
 
@@ -558,6 +581,33 @@ async function notifyAllUsersNewEntry(entry, excludeTelegramId = 0) {
   }
 }
 
+async function broadcastAdminMessage(message, excludeTelegramId = 0) {
+  const users = await dbListUsers();
+  let sent = 0;
+
+  for (const user of users) {
+    const telegramId = Number(user.telegram_id || 0);
+    if (!telegramId) continue;
+    if (excludeTelegramId && telegramId === Number(excludeTelegramId)) continue;
+
+    try {
+      await bot.sendMessage(telegramId, message, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
+          ],
+        },
+      });
+      sent += 1;
+    } catch (e) {
+      console.error(`Erreur broadcast user ${telegramId}:`, e.message);
+    }
+  }
+
+  return sent;
+}
+
 /* ================== API ================== */
 app.post("/api/namek/unlock", async (req, res) => {
   try {
@@ -577,12 +627,12 @@ app.post("/api/namek/unlock", async (req, res) => {
     if (error) throw error;
 
     const isValid = Array.isArray(data) && data.length > 0;
-
     return res.json({ ok: isValid });
   } catch (e) {
     return res.status(500).json({ ok: false, error: "unlock_error", message: e.message });
   }
 });
+
 app.get("/api/namek/entries", async (_req, res) => {
   try {
     const rows = await dbListPublicEntries();
@@ -613,7 +663,6 @@ app.post("/api/track", async (req, res) => {
     ]);
 
     if (error) throw error;
-
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: "track_error", message: e.message });
@@ -654,6 +703,8 @@ function sendAdminMenu(chatId) {
           [{ text: "❌ Supprimer un mot de passe", callback_data: "namek_delete_password" }],
           [{ text: "📚 Voir les fiches", callback_data: "namek_list_entries" }],
           [{ text: "🔑 Voir les mots de passe", callback_data: "namek_list_passwords" }],
+          [{ text: "👥 Voir les utilisateurs", callback_data: "namek_list_users" }],
+          [{ text: "📣 Envoyer un message", callback_data: "namek_send_message" }],
           [{ text: "📘 Liste des commandes", callback_data: "namek_show_commands" }],
         ],
       },
@@ -683,6 +734,8 @@ function getCommandsText() {
     "❌ Supprimer un mot de passe",
     "📚 Voir les fiches",
     "🔑 Voir les mots de passe",
+    "👥 Voir les utilisateurs",
+    "📣 Envoyer un message",
   ].join("\n");
 }
 
@@ -698,9 +751,26 @@ bot.onText(/\/start/, async (msg) => {
 
 /* ================== WIZARD ================== */
 const adminWizard = new Map();
+const wizardHistory = new Map();
 
 function clearWizard(chatId) {
   adminWizard.delete(chatId);
+  wizardHistory.delete(chatId);
+}
+
+function pushHistory(chatId, state) {
+  if (!wizardHistory.has(chatId)) {
+    wizardHistory.set(chatId, []);
+  }
+
+  const stack = wizardHistory.get(chatId);
+  stack.push(JSON.parse(JSON.stringify(state)));
+}
+
+function popHistory(chatId) {
+  const stack = wizardHistory.get(chatId) || [];
+  if (!stack.length) return null;
+  return stack.pop();
 }
 
 /* ================== CALLBACKS ================== */
@@ -748,6 +818,22 @@ bot.on("callback_query", async (query) => {
       return bot.sendMessage(chatId, "⛔ Accès réservé aux admins.");
     }
 
+    if (data === "namek_back") {
+      const prev = popHistory(chatId);
+
+      if (!prev) {
+        return bot.sendMessage(chatId, "⬅️ Impossible de revenir en arrière.", {
+          reply_markup: cancelOnlyButtons(),
+        });
+      }
+
+      adminWizard.set(chatId, prev);
+
+      return bot.sendMessage(chatId, "⬅️ Étape précédente restaurée.", {
+        reply_markup: wizardButtons(),
+      });
+    }
+
     if (data === "namek_cancel") {
       clearWizard(chatId);
       return bot.sendMessage(chatId, "❌ Action annulée.").then(() => sendStartMenu(chatId, query.from));
@@ -755,6 +841,51 @@ bot.on("callback_query", async (query) => {
 
     if (data === "namek_show_commands") {
       return bot.sendMessage(chatId, getCommandsText(), { parse_mode: "Markdown" });
+    }
+
+    if (data === "namek_list_users") {
+      const users = await dbListUsers();
+
+      if (!users.length) {
+        return bot.sendMessage(chatId, "Aucun utilisateur enregistré.");
+      }
+
+      const chunks = [];
+      let buffer = "👥 *Utilisateurs du bot*\n\n";
+
+      for (const user of users) {
+        const line = `${formatUserLine(user)}\n\n`;
+
+        if ((buffer + line).length > 3500) {
+          chunks.push(buffer);
+          buffer = line;
+        } else {
+          buffer += line;
+        }
+      }
+
+      if (buffer.trim()) chunks.push(buffer);
+
+      for (const chunk of chunks) {
+        await bot.sendMessage(chatId, chunk, { parse_mode: "Markdown" });
+      }
+
+      return;
+    }
+
+    if (data === "namek_send_message") {
+      adminWizard.set(chatId, {
+        type: "broadcast_message",
+        step: "message",
+        data: {},
+      });
+      wizardHistory.set(chatId, []);
+
+      return bot.sendMessage(
+        chatId,
+        "📣 Écris le message à envoyer à tous les utilisateurs du bot :",
+        { reply_markup: wizardButtons() }
+      );
     }
 
     if (data === "namek_list_entries") {
@@ -795,7 +926,7 @@ bot.on("callback_query", async (query) => {
       });
 
       return bot.sendMessage(chatId, "🔐 Nouveau mot de passe ?", {
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
 
@@ -807,7 +938,7 @@ bot.on("callback_query", async (query) => {
       });
 
       return bot.sendMessage(chatId, "❌ Mot de passe à supprimer ?", {
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
 
@@ -825,9 +956,10 @@ bot.on("callback_query", async (query) => {
           })),
         },
       });
+      wizardHistory.set(chatId, []);
 
       return bot.sendMessage(chatId, "➕ Ajout fiche Namek\n\n1/14 — Titre ?", {
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
 
@@ -868,6 +1000,7 @@ bot.on("callback_query", async (query) => {
           title: entry.title,
         },
       });
+      wizardHistory.set(chatId, []);
 
       return bot.sendMessage(chatId, `Modifier *${entry.title}*\n\nChoisis le nouveau statut :`, {
         parse_mode: "Markdown",
@@ -908,6 +1041,7 @@ bot.on("callback_query", async (query) => {
       const state = adminWizard.get(chatId);
       if (!state || state.type !== "add_entry" || state.step !== "category") return;
 
+      pushHistory(chatId, state);
       const category = data.replace("namek_cat_", "");
       state.data.category = normalizeCategory(category);
       state.step = "subcategory";
@@ -922,13 +1056,14 @@ bot.on("callback_query", async (query) => {
       const state = adminWizard.get(chatId);
       if (!state || state.type !== "add_entry" || state.step !== "subcategory") return;
 
+      pushHistory(chatId, state);
       state.data.subcategory = "";
       state.step = "micron";
       adminWizard.set(chatId, state);
 
       return bot.sendMessage(chatId, "5/14 — Micron ?\n\nExemples : 45u, 73u, full melt\nEnvoie `-` si aucun.", {
         parse_mode: "Markdown",
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
 
@@ -936,6 +1071,7 @@ bot.on("callback_query", async (query) => {
       const state = adminWizard.get(chatId);
       if (!state || state.type !== "add_entry" || state.step !== "subcategory") return;
 
+      pushHistory(chatId, state);
       const subcategory = data.replace("namek_sub_", "");
       state.data.subcategory = normalizeSubcategory(state.data.category, subcategory);
       state.step = "micron";
@@ -943,7 +1079,7 @@ bot.on("callback_query", async (query) => {
 
       return bot.sendMessage(chatId, "5/14 — Micron ?\n\nExemples : 45u, 73u, full melt\nEnvoie `-` si aucun.", {
         parse_mode: "Markdown",
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
 
@@ -951,6 +1087,7 @@ bot.on("callback_query", async (query) => {
       const state = adminWizard.get(chatId);
       if (!state || state.type !== "edit_entry" || state.step !== "status") return;
 
+      pushHistory(chatId, state);
       const status = data.replace("namek_status_", "");
       state.data.status = normalizeStatus(status);
       state.step = "featured";
@@ -958,7 +1095,7 @@ bot.on("callback_query", async (query) => {
 
       return bot.sendMessage(chatId, "Mettre aussi la fiche en mise en avant ?\n\nRéponds par `oui` ou `non`.", {
         parse_mode: "Markdown",
-        reply_markup: cancelButtons(),
+        reply_markup: wizardButtons(),
       });
     }
   } catch (e) {
@@ -1003,19 +1140,42 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(chatId, "✅ Mot de passe supprimé.").then(() => sendStartMenu(chatId, msg.from));
     }
 
+    if (state.type === "broadcast_message" && state.step === "message") {
+      const message = safeText(text);
+      if (!message) {
+        throw new Error("Message vide");
+      }
+
+      clearWizard(chatId);
+
+      const sentCount = await broadcastAdminMessage(message, msg.from.id);
+
+      await dbLogAction(msg.from.id, "broadcast_message", "users", "", {
+        message,
+        sent_count: sentCount,
+      });
+
+      return bot.sendMessage(
+        chatId,
+        `✅ Message envoyé.\n\nDestinataires : ${sentCount}`,
+      ).then(() => sendStartMenu(chatId, msg.from));
+    }
+
     if (state.type === "add_entry") {
       if (state.step === "title") {
+        pushHistory(chatId, state);
         state.data.title = text;
         state.step = "image_url";
         adminWizard.set(chatId, state);
 
         return bot.sendMessage(chatId, "2/14 — URL image ?\n\nEnvoie `-` si aucune.", {
           parse_mode: "Markdown",
-          reply_markup: cancelButtons(),
+          reply_markup: wizardButtons(),
         });
       }
 
       if (state.step === "image_url") {
+        pushHistory(chatId, state);
         state.data.image_url = text === "-" ? "" : text;
         state.step = "category";
         adminWizard.set(chatId, state);
@@ -1026,23 +1186,25 @@ bot.on("message", async (msg) => {
       }
 
       if (state.step === "micron") {
+        pushHistory(chatId, state);
         state.data.micron = normalizeMicron(text);
         state.step = "description";
         adminWizard.set(chatId, state);
 
         return bot.sendMessage(chatId, "6/14 — Description générale ?", {
-          reply_markup: cancelButtons(),
+          reply_markup: wizardButtons(),
         });
       }
 
       if (state.step === "description") {
+        pushHistory(chatId, state);
         state.data.description = text;
         state.step = "q10";
         adminWizard.set(chatId, state);
 
         return bot.sendMessage(chatId, "7/14 — Pastille 10g : Prix + description, ou `-`", {
           parse_mode: "Markdown",
-          reply_markup: cancelButtons(),
+          reply_markup: wizardButtons(),
         });
       }
 
@@ -1050,6 +1212,7 @@ bot.on("message", async (msg) => {
       const qIndex = qSteps.indexOf(state.step);
 
       if (qIndex !== -1) {
+        pushHistory(chatId, state);
         const parsed = parseQuantityInput(text);
 
         state.data.quantity_options[qIndex] = {
@@ -1067,7 +1230,7 @@ bot.on("message", async (msg) => {
             `${qIndex + 8}/14 — Pastille ${QUANTITIES_DEFAULT[qIndex + 1]} : Prix + description, ou \`-\``,
             {
               parse_mode: "Markdown",
-              reply_markup: cancelButtons(),
+              reply_markup: wizardButtons(),
             }
           );
         }
