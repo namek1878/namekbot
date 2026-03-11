@@ -1,17 +1,54 @@
 (() => {
-  /* ================= TELEGRAM ================= */
   const tg = window.Telegram?.WebApp;
   if (tg) {
     tg.ready();
     tg.expand();
   }
 
-  /* ================= HELPERS ================= */
   const $ = (id) => document.getElementById(id);
   const safeStr = (v) => (v == null ? "" : String(v));
   const norm = (v) => safeStr(v).trim().toLowerCase();
 
-  const ACCESS_KEY = "namek_access_ok_v1";
+  const listEl = $("list");
+  const carouselList = $("carouselList");
+  const searchInput = $("searchInput");
+  const clearBtn = $("clearBtn");
+  const categoryFilter = $("categoryFilter");
+  const subcategoryFilter = $("subcategoryFilter");
+  const promoToggle = $("promoToggle");
+  const newToggle = $("newToggle");
+
+  const pokeName = $("pokeName");
+  const pokeId = $("pokeId");
+  const pokeImg = $("pokeImg");
+  const placeholder = $("placeholder");
+  const pokeType = $("pokeType");
+  const pokeThc = $("pokeThc");
+  const pokeDesc = $("pokeDesc");
+  const quantityWrap = $("quantityWrap");
+
+  const listSkeleton = $("listSkeleton");
+  const detailsSkeleton = $("detailsSkeleton");
+  const detailsReal = $("detailsReal");
+  const detailsPanel = $("detailsPanel");
+
+  const newEntries = $("newEntries");
+  const weekNewEntries = $("weekNewEntries");
+  const promoEntries = $("promoEntries");
+
+  const unlockOverlay = $("unlockOverlay");
+  const unlockInput = $("unlockInput");
+  const unlockBtn = $("unlockBtn");
+  const unlockError = $("unlockError");
+
+  let allEntries = [];
+  let selected = null;
+
+  let searchQuery = "";
+  let selectedCategory = "";
+  let selectedSubcategory = "";
+  let onlyPromo = false;
+  let onlyNew = false;
 
   function toast(msg) {
     const el = $("toast");
@@ -69,37 +106,6 @@
     return [...entries].sort((a, b) => entryDateValue(b) - entryDateValue(a));
   }
 
-  function getVisibleQuantities(entry) {
-    if (Array.isArray(entry?.visible_quantities) && entry.visible_quantities.length) {
-      return entry.visible_quantities;
-    }
-
-    if (Array.isArray(entry?.quantity_options)) {
-      return entry.quantity_options.filter((q) => {
-        const price = norm(q?.price);
-        const description = norm(q?.description);
-        return (price && price !== "-") || (description && description !== "-");
-      });
-    }
-
-    return [];
-  }
-
-  function getBestPromoPriceInfo(entry) {
-    const quantities = getVisibleQuantities(entry);
-    if (!quantities.length) return null;
-
-    const first = quantities[0];
-
-    return {
-      currentPrice: safeStr(first.price || "-"),
-      oldPrice: safeStr(first.old_price || first.original_price || ""),
-      promoPrice: safeStr(first.promo_price || first.price || "-"),
-      description: safeStr(first.description || ""),
-      amount: safeStr(first.amount || ""),
-    };
-  }
-
   function escapeHtml(value) {
     return safeStr(value)
       .replace(/&/g, "&amp;")
@@ -109,32 +115,34 @@
       .replace(/'/g, "&#039;");
   }
 
-  function buildEntryMeta(entry) {
-    return [
+  function getVisibleQuantities(entry) {
+    if (Array.isArray(entry?.quantity_options)) {
+      return entry.quantity_options.filter((q) => {
+        return norm(q?.price) !== "-" || norm(q?.promo_price) || norm(q?.description) !== "-";
+      });
+    }
+    return [];
+  }
+
+  function formatEntryMeta(entry) {
+    const parts = [
       categoryLabel(entry.category),
       entry.subcategory ? titleCase(entry.subcategory) : "",
       entry.micron ? entry.micron : "",
-    ].filter(Boolean).join(" • ");
+    ].filter(Boolean);
+    return parts.join(" • ");
   }
 
-  function getEntriesFromLast7Days() {
-    const limit = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    return sortNewestFirst(
-      allEntries.filter((entry) => entry.status === "nouveaute" && entryDateValue(entry) >= limit)
-    );
+  function scrollToDetails() {
+    const target = detailsPanel || detailsReal;
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function hasAccess() {
-    return localStorage.getItem(ACCESS_KEY) === "1";
-  }
-
-  function saveAccess() {
-    localStorage.setItem(ACCESS_KEY, "1");
-  }
-
-  function showApp() {
-    $("lockScreen")?.style.setProperty("display", "none");
-    $("appShell")?.style.setProperty("display", "block");
+  function setLoading(on) {
+    if (listSkeleton) listSkeleton.style.display = on ? "block" : "none";
+    if (detailsSkeleton) detailsSkeleton.style.display = on ? "block" : "none";
+    if (detailsReal) detailsReal.style.display = on ? "none" : "block";
   }
 
   async function unlockApp(password) {
@@ -144,64 +152,43 @@
       body: JSON.stringify({ password }),
     });
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
+    if (!res.ok) throw new Error("unlock_error");
     const data = await res.json();
     return !!data.ok;
   }
 
-  /* ================= ELEMENTS ================= */
-  const listEl = $("list");
-  const carouselList = $("carouselList");
-  const searchInput = $("searchInput");
-  const clearBtn = $("clearBtn");
-  const categoryFilter = $("categoryFilter");
-  const subcategoryFilter = $("subcategoryFilter");
-  const promoToggle = $("promoToggle");
-  const newToggle = $("newToggle");
-
-  const pokeName = $("pokeName");
-  const pokeId = $("pokeId");
-  const pokeImg = $("pokeImg");
-  const placeholder = $("placeholder");
-  const pokeType = $("pokeType");
-  const pokeThc = $("pokeThc");
-  const pokeDesc = $("pokeDesc");
-  const quantityWrap = $("quantityWrap");
-
-  const listSkeleton = $("listSkeleton");
-  const detailsSkeleton = $("detailsSkeleton");
-  const detailsReal = $("detailsReal");
-
-  const newEntries = $("newEntries");
-  const weekNewEntries = $("weekNewEntries");
-  const promoEntries = $("promoEntries");
-
-  const unlockForm = $("unlockForm");
-  const unlockPassword = $("unlockPassword");
-  const unlockError = $("unlockError");
-  const unlockButton = $("unlockButton");
-
-  /* ================= STATE ================= */
-  let allEntries = [];
-  let selected = null;
-
-  let searchQuery = "";
-  let selectedCategory = "";
-  let selectedSubcategory = "";
-  let onlyPromo = false;
-  let onlyNew = false;
-
-  /* ================= LOADING ================= */
-  function setLoading(on) {
-    if (listSkeleton) listSkeleton.style.display = on ? "block" : "none";
-    if (detailsSkeleton) detailsSkeleton.style.display = on ? "block" : "none";
-    if (detailsReal) detailsReal.style.display = on ? "none" : "block";
+  function showUnlockError(message) {
+    if (unlockError) {
+      unlockError.textContent = message;
+      unlockError.style.display = "block";
+    }
   }
 
-  /* ================= DATA ================= */
+  function hideUnlockError() {
+    if (unlockError) {
+      unlockError.textContent = "";
+      unlockError.style.display = "none";
+    }
+  }
+
+  function isUnlocked() {
+    return localStorage.getItem("namek_unlocked") === "1";
+  }
+
+  function setUnlocked() {
+    localStorage.setItem("namek_unlocked", "1");
+  }
+
+  async function guardApp() {
+    if (isUnlocked()) {
+      if (unlockOverlay) unlockOverlay.style.display = "none";
+      return true;
+    }
+
+    if (unlockOverlay) unlockOverlay.style.display = "flex";
+    return false;
+  }
+
   async function loadEntries() {
     setLoading(true);
 
@@ -219,7 +206,7 @@
 
       const first = filteredEntries()[0] || allEntries[0];
       if (first) {
-        selectEntry(first);
+        selectEntry(first, { scroll: false });
       } else {
         clearDetails();
       }
@@ -233,6 +220,14 @@
 
   function getLatestNewEntry() {
     return sortNewestFirst(allEntries.filter((e) => e.status === "nouveaute"))[0] || null;
+  }
+
+  function getWeekNewEntries() {
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    return sortNewestFirst(
+      allEntries.filter((entry) => entryDateValue(entry) >= sevenDaysAgo)
+    ).slice(0, 7);
   }
 
   function getPromoEntries() {
@@ -249,69 +244,46 @@
     if (!newEntries) return;
 
     const entry = getLatestNewEntry();
-
     if (!entry) {
       newEntries.className = "spotlight-empty";
       newEntries.innerHTML = "Aucune nouveauté pour le moment.";
-      newEntries.onclick = null;
       return;
     }
 
-    const meta = buildEntryMeta(entry);
-
-    newEntries.className = "spotlight-entry";
+    newEntries.className = "spotlight-entry spotlight-entry-main";
     newEntries.innerHTML = `
-      ${entry.image_url ? `
-        <div style="margin-bottom:10px;">
-          <img
-            src="${escapeHtml(entry.image_url)}"
-            alt="${escapeHtml(entry.title)}"
-            style="width:100%; max-height:180px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.08);"
-          >
-        </div>
-      ` : ""}
-
-      <strong>${escapeHtml(entry.title)}</strong>
-      <small>${escapeHtml(meta)}</small>
-      <small>${escapeHtml(entry.description || "Aucune description.")}</small>
+      <div class="spotlight-clickable">
+        <div class="spotlight-entry-title">${escapeHtml(entry.title)}</div>
+        <div class="spotlight-entry-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
+        <div class="spotlight-entry-desc">${escapeHtml(entry.description || "Aucune description.")}</div>
+      </div>
     `;
 
-    newEntries.style.cursor = "pointer";
-    newEntries.onclick = () => selectEntry(entry);
+    newEntries.onclick = () => selectEntry(entry, { scroll: true });
   }
 
   function renderWeekNewEntries() {
     if (!weekNewEntries) return;
 
-    const entries = getEntriesFromLast7Days().slice(0, 7);
-
+    const entries = getWeekNewEntries();
     if (!entries.length) {
       weekNewEntries.className = "spotlight-empty";
       weekNewEntries.innerHTML = "Aucune nouveauté cette semaine.";
       return;
     }
 
-    weekNewEntries.className = "";
-    weekNewEntries.innerHTML = `
-      <div class="spotlight-entry" style="gap:10px;">
-        <strong>📅 Nouveautés des 7 derniers jours</strong>
-        ${entries.map((entry) => `
-          <div
-            class="promo-entry"
-            data-entry-id="${escapeHtml(entry.id)}"
-            style="padding:10px 0; border-top:1px solid rgba(255,255,255,.06); cursor:pointer;"
-          >
-            <div style="font-weight:800;">${escapeHtml(entry.title)}</div>
-            <small>${escapeHtml(buildEntryMeta(entry))}</small>
-          </div>
-        `).join("")}
+    weekNewEntries.className = "spotlight-week-list";
+    weekNewEntries.innerHTML = entries.map((entry) => `
+      <div class="week-entry" data-entry-id="${escapeHtml(entry.id)}">
+        <div class="week-entry-title">${escapeHtml(entry.title)}</div>
+        <div class="week-entry-meta">${escapeHtml(formatEntryMeta(entry))}</div>
       </div>
-    `;
+    `).join("");
 
     weekNewEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
       el.addEventListener("click", () => {
         const entry = allEntries.find((x) => String(x.id) === String(el.dataset.entryId));
-        if (entry) selectEntry(entry);
+        if (entry) selectEntry(entry, { scroll: true });
       });
     });
   }
@@ -320,67 +292,51 @@
     if (!promoEntries) return;
 
     const promos = getPromoEntries();
-
     if (!promos.length) {
       promoEntries.className = "spotlight-empty";
       promoEntries.innerHTML = "Aucune promotion active pour le moment.";
-      promoEntries.onclick = null;
       return;
     }
 
-    promoEntries.className = "";
-    promoEntries.innerHTML = promos
-      .map((entry) => {
-        const priceInfo = getBestPromoPriceInfo(entry);
-
-        return `
-          <div class="spotlight-entry promo-entry" data-entry-id="${escapeHtml(entry.id)}" style="margin-bottom:10px; cursor:pointer;">
-            <strong>${escapeHtml(entry.title)}</strong>
-            <small>${escapeHtml(buildEntryMeta(entry))}</small>
-            <small>${escapeHtml(entry.description || "Aucune description.")}</small>
-
-            ${
-              priceInfo
-                ? `
-                  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
-                    ${
-                      priceInfo.oldPrice
-                        ? `<span style="text-decoration:line-through; opacity:.7;">Avant : ${escapeHtml(priceInfo.oldPrice)}</span>`
-                        : ""
-                    }
-                    <span style="font-weight:800; color:#ffd25a;">Maintenant : ${escapeHtml(priceInfo.promoPrice || priceInfo.currentPrice)}</span>
-                    ${
-                      priceInfo.amount
-                        ? `<span style="opacity:.8;">${escapeHtml(priceInfo.amount)}</span>`
-                        : ""
-                    }
-                  </div>
-                `
-                : ""
-            }
+    promoEntries.className = "promo-list";
+    promoEntries.innerHTML = promos.map((entry) => {
+      const promoLines = getVisibleQuantities(entry)
+        .filter((q) => norm(q.promo_price))
+        .map((q) => `
+          <div class="promo-price-line">
+            <span class="promo-amount">${escapeHtml(q.amount || "-")}</span>
+            <span class="promo-old">${escapeHtml(q.original_price || q.price || "-")}</span>
+            <span class="promo-arrow">→</span>
+            <span class="promo-new">${escapeHtml(q.promo_price || "-")}</span>
           </div>
-        `;
-      })
-      .join("");
+        `)
+        .join("");
+
+      return `
+        <div class="promo-entry-card" data-entry-id="${escapeHtml(entry.id)}">
+          <div class="promo-entry-title">${escapeHtml(entry.title)}</div>
+          <div class="promo-entry-meta">${escapeHtml(formatEntryMeta(entry))}</div>
+          <div class="promo-entry-desc">${escapeHtml(entry.description || "")}</div>
+          ${promoLines ? `<div class="promo-price-box">${promoLines}</div>` : ""}
+        </div>
+      `;
+    }).join("");
 
     promoEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
       el.addEventListener("click", () => {
         const entry = allEntries.find((x) => String(x.id) === String(el.dataset.entryId));
-        if (entry) selectEntry(entry);
+        if (entry) selectEntry(entry, { scroll: true });
       });
     });
   }
 
-  /* ================= FILTERS ================= */
   function getAvailableSubcategories(category = "") {
     const source = category
       ? allEntries.filter((entry) => entry.category === category)
       : allEntries;
 
     const items = [...new Set(
-      source
-        .map((entry) => norm(entry.subcategory))
-        .filter(Boolean)
+      source.map((entry) => norm(entry.subcategory)).filter(Boolean)
     )];
 
     return items.sort((a, b) => a.localeCompare(b, "fr"));
@@ -424,40 +380,25 @@
           entry.status,
         ].some((field) => norm(field).includes(q));
 
-      const matchesCategory =
-        !selectedCategory || norm(entry.category) === norm(selectedCategory);
+      const matchesCategory = !selectedCategory || norm(entry.category) === norm(selectedCategory);
+      const matchesSubcategory = !selectedSubcategory || norm(entry.subcategory) === norm(selectedSubcategory);
+      const matchesPromo = !onlyPromo || entry.status === "promotion";
+      const matchesNew = !onlyNew || entry.status === "nouveaute";
 
-      const matchesSubcategory =
-        !selectedSubcategory || norm(entry.subcategory) === norm(selectedSubcategory);
-
-      const matchesPromo =
-        !onlyPromo || entry.status === "promotion";
-
-      const matchesNew =
-        !onlyNew || entry.status === "nouveaute";
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesSubcategory &&
-        matchesPromo &&
-        matchesNew
-      );
+      return matchesSearch && matchesCategory && matchesSubcategory && matchesPromo && matchesNew;
     });
   }
 
-  /* ================= RENDER ================= */
   function renderCarousel() {
     if (!carouselList) return;
     carouselList.innerHTML = "";
 
     const featured = sortNewestFirst(
-      allEntries.filter(
-        (entry) =>
-          entry.is_featured ||
-          entry.status === "mise_en_avant" ||
-          entry.status === "nouveaute" ||
-          entry.status === "promotion"
+      allEntries.filter((entry) =>
+        entry.is_featured ||
+        entry.status === "mise_en_avant" ||
+        entry.status === "nouveaute" ||
+        entry.status === "promotion"
       )
     ).slice(0, 8);
 
@@ -470,17 +411,15 @@
 
     source.forEach((entry) => {
       const card = document.createElement("div");
-      card.className = "list-item";
+      card.className = "list-item card-clickable";
       card.innerHTML = `
         <div class="list-item-top">
-          <div class="list-item-title">${escapeHtml(entry.title)}</div>
+          <div class="list-item-title large-title">${escapeHtml(entry.title)}</div>
           <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
         </div>
-        <div class="muted">
-          ${escapeHtml(buildEntryMeta(entry))}
-        </div>
+        <div class="list-item-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
       `;
-      card.addEventListener("click", () => selectEntry(entry));
+      card.addEventListener("click", () => selectEntry(entry, { scroll: true }));
       carouselList.appendChild(card);
     });
   }
@@ -498,17 +437,17 @@
 
     filtered.forEach((entry) => {
       const item = document.createElement("div");
-      item.className = `list-item${selected?.id === entry.id ? " active" : ""}`;
+      item.className = `list-item card-clickable${selected?.id === entry.id ? " active" : ""}`;
 
       item.innerHTML = `
         <div class="list-item-top">
-          <div class="list-item-title">${escapeHtml(entry.title)}</div>
+          <div class="list-item-title large-title">${escapeHtml(entry.title)}</div>
           <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
         </div>
-        <div class="muted">${escapeHtml(buildEntryMeta(entry))}</div>
+        <div class="list-item-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
       `;
 
-      item.addEventListener("click", () => selectEntry(entry));
+      item.addEventListener("click", () => selectEntry(entry, { scroll: true }));
       listEl.appendChild(item);
     });
   }
@@ -533,12 +472,13 @@
     }
   }
 
-  function selectEntry(entry) {
+  function selectEntry(entry, options = {}) {
+    const { scroll = false } = options;
     selected = entry;
 
     if (pokeName) pokeName.textContent = entry.title || "—";
     if (pokeId) pokeId.textContent = "";
-    if (pokeType) pokeType.textContent = buildEntryMeta(entry) || "—";
+    if (pokeType) pokeType.textContent = formatEntryMeta(entry) || "—";
     if (pokeThc) pokeThc.textContent = entryStatusLabel(entry.status);
     if (pokeDesc) pokeDesc.textContent = entry.description || "—";
 
@@ -554,7 +494,6 @@
 
     if (quantityWrap) {
       quantityWrap.innerHTML = "";
-
       const qty = getVisibleQuantities(entry);
 
       if (!qty.length) {
@@ -563,61 +502,43 @@
         quantityWrap.style.display = "grid";
 
         qty.forEach((q) => {
-          const oldPrice = safeStr(q.old_price || q.original_price || "");
-          const promoPrice = safeStr(q.promo_price || q.price || "-");
-
           const card = document.createElement("div");
           card.className = "qty-card";
-          card.innerHTML = `
-            <div class="qty-top">
-              <div class="qty-amount">${escapeHtml(q.amount || "-")}</div>
-              <div class="qty-price">${escapeHtml(promoPrice)}</div>
-            </div>
-            ${
-              oldPrice
-                ? `<div class="qty-desc" style="text-decoration:line-through; opacity:.7; margin-bottom:4px;">Avant : ${escapeHtml(oldPrice)}</div>`
-                : ""
-            }
-            <div class="qty-desc">${escapeHtml(q.description || "-")}</div>
-          `;
+
+          const hasPromo = norm(q.promo_price);
+
+          if (hasPromo) {
+            card.innerHTML = `
+              <div class="qty-top">
+                <div class="qty-amount">${escapeHtml(q.amount || "-")}</div>
+                <div class="qty-price promo-price-wrap">
+                  <span class="qty-old-price">${escapeHtml(q.original_price || q.price || "-")}</span>
+                  <span class="qty-arrow">→</span>
+                  <span class="qty-promo-price">${escapeHtml(q.promo_price || "-")}</span>
+                </div>
+              </div>
+              <div class="qty-desc">${escapeHtml(q.description || "-")}</div>
+            `;
+          } else {
+            card.innerHTML = `
+              <div class="qty-top">
+                <div class="qty-amount">${escapeHtml(q.amount || "-")}</div>
+                <div class="qty-price">${escapeHtml(q.price || "-")}</div>
+              </div>
+              <div class="qty-desc">${escapeHtml(q.description || "-")}</div>
+            `;
+          }
+
           quantityWrap.appendChild(card);
         });
       }
     }
 
     renderList();
-  }
 
-  /* ================= EVENTS ================= */
-  if (unlockForm) {
-    unlockForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const password = safeStr(unlockPassword?.value || "").trim();
-      if (!password) return;
-
-      if (unlockError) unlockError.style.display = "none";
-      if (unlockButton) unlockButton.disabled = true;
-
-      try {
-        const ok = await unlockApp(password);
-
-        if (!ok) {
-          if (unlockError) unlockError.style.display = "block";
-          if (unlockPassword) unlockPassword.value = "";
-          return;
-        }
-
-        saveAccess();
-        showApp();
-        await loadEntries();
-      } catch (e2) {
-        console.error(e2);
-        toast("Erreur vérification mot de passe");
-      } finally {
-        if (unlockButton) unlockButton.disabled = false;
-      }
-    });
+    if (scroll) {
+      setTimeout(() => scrollToDetails(), 60);
+    }
   }
 
   if (searchInput) {
@@ -649,7 +570,6 @@
 
       promoToggle.classList.toggle("active", onlyPromo);
       newToggle?.classList.toggle("active", onlyNew);
-
       renderList();
     });
   }
@@ -661,7 +581,6 @@
 
       newToggle.classList.toggle("active", onlyNew);
       promoToggle?.classList.toggle("active", onlyPromo);
-
       renderList();
     });
   }
@@ -686,15 +605,49 @@
     });
   }
 
-  /* ================= INIT ================= */
-  (async () => {
-    if (hasAccess()) {
-      showApp();
-      await loadEntries();
-      return;
-    }
+  if (unlockBtn) {
+    unlockBtn.addEventListener("click", async () => {
+      const password = safeStr(unlockInput?.value).trim();
+      if (!password) {
+        showUnlockError("Entre un mot de passe.");
+        return;
+      }
 
-    $("lockScreen")?.style.setProperty("display", "flex");
-    $("appShell")?.style.setProperty("display", "none");
+      hideUnlockError();
+      unlockBtn.disabled = true;
+
+      try {
+        const ok = await unlockApp(password);
+        if (!ok) {
+          showUnlockError("Mot de passe incorrect.");
+          return;
+        }
+
+        setUnlocked();
+        if (unlockOverlay) unlockOverlay.style.display = "none";
+        await loadEntries();
+      } catch (e) {
+        console.error(e);
+        showUnlockError("Erreur de vérification.");
+      } finally {
+        unlockBtn.disabled = false;
+      }
+    });
+  }
+
+  if (unlockInput) {
+    unlockInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        unlockBtn?.click();
+      }
+    });
+  }
+
+  (async () => {
+    const allowed = await guardApp();
+    if (allowed) {
+      await loadEntries();
+    }
   })();
 })();
