@@ -361,14 +361,14 @@ function broadcastTypeKeyboard() {
 function editFieldKeyboard(entryId) {
   return {
     inline_keyboard: [
-      [{ text: "✏️ Titre", callback_data: `namek_edit_field_title_${entryId}` }],
-      [{ text: "📝 Description", callback_data: `namek_edit_field_description_${entryId}` }],
-      [{ text: "🖼️ Image", callback_data: `namek_edit_field_image_${entryId}` }],
-      [{ text: "🌿 Catégorie", callback_data: `namek_edit_field_category_${entryId}` }],
-      [{ text: "📦 Sous-catégorie", callback_data: `namek_edit_field_subcategory_${entryId}` }],
-      [{ text: "🧪 Micron", callback_data: `namek_edit_field_micron_${entryId}` }],
-      [{ text: "💸 Prix / descriptions", callback_data: `namek_edit_field_prices_${entryId}` }],
-      [{ text: "🏷️ Statut / Promo", callback_data: `namek_edit_field_status_${entryId}` }],
+      [{ text: "✏️ Titre", callback_data: `nef_t_${entryId}` }],
+      [{ text: "📝 Description", callback_data: `nef_d_${entryId}` }],
+      [{ text: "🖼️ Image", callback_data: `nef_i_${entryId}` }],
+      [{ text: "🌿 Catégorie", callback_data: `nef_c_${entryId}` }],
+      [{ text: "📦 Sous-catégorie", callback_data: `nef_s_${entryId}` }],
+      [{ text: "🧪 Micron", callback_data: `nef_m_${entryId}` }],
+      [{ text: "💸 Prix / descriptions", callback_data: `nef_p_${entryId}` }],
+      [{ text: "🏷️ Statut / Promo", callback_data: `nef_st_${entryId}` }],
       [{ text: "❌ Annuler", callback_data: "namek_cancel" }],
     ],
   };
@@ -1229,89 +1229,104 @@ bot.on("callback_query", async (query) => {
       });
     }
 
-    if (data.startsWith("namek_edit_field_")) {
-      const state = adminWizard.get(chatId);
-      if (!state || state.type !== "edit_entry" || state.step !== "field") return;
+    if (data.startsWith("nef_")) {
+  const state = adminWizard.get(chatId);
+  if (!state || state.type !== "edit_entry" || state.step !== "field") return;
 
-      const rest = data.replace("namek_edit_field_", "");
-      const parts = rest.split("_");
-      const id = parts.pop();
-      const field = parts.join("_");
+  const rest = data.replace("nef_", "");
+  const firstUnderscore = rest.indexOf("_");
+  if (firstUnderscore === -1) return;
 
-      pushHistory(chatId, state);
-      state.data.id = id;
-      state.data.edit_field = field;
+  const fieldCode = rest.slice(0, firstUnderscore);
+  const id = rest.slice(firstUnderscore + 1);
 
-      if (field === "title") {
-        state.step = "edit_title";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "✏️ Nouveau titre ?", { reply_markup: wizardButtons() });
-      }
+  const fieldMap = {
+    t: "title",
+    d: "description",
+    i: "image",
+    c: "category",
+    s: "subcategory",
+    m: "micron",
+    p: "prices",
+    st: "status",
+  };
 
-      if (field === "description") {
-        state.step = "edit_description";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "📝 Nouvelle description ?", { reply_markup: wizardButtons() });
-      }
+  const field = fieldMap[fieldCode];
+  if (!field) return;
 
-      if (field === "image") {
-        state.step = "edit_image";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "🖼️ Nouvelle URL image ?\n\nEnvoie `-` pour enlever l’image.", {
-          parse_mode: "Markdown",
-          reply_markup: wizardButtons(),
-        });
-      }
+  pushHistory(chatId, state);
+  state.data.id = id;
+  state.data.edit_field = field;
 
-      if (field === "micron") {
-        state.step = "edit_micron";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "🧪 Nouveau micron ?\n\nEnvoie `-` si aucun.", {
-          parse_mode: "Markdown",
-          reply_markup: wizardButtons(),
-        });
-      }
+  if (field === "title") {
+    state.step = "edit_title";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "✏️ Nouveau titre ?", { reply_markup: wizardButtons() });
+  }
 
-      if (field === "category") {
-        state.step = "edit_category";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "🌿 Nouvelle catégorie :", {
-          reply_markup: categoryKeyboard(),
-        });
-      }
+  if (field === "description") {
+    state.step = "edit_description";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "📝 Nouvelle description ?", { reply_markup: wizardButtons() });
+  }
 
-      if (field === "subcategory") {
-        const entry = await dbGetEntryById(id);
-        if (!entry) throw new Error("Fiche introuvable.");
-        state.data.category = entry.category;
-        state.step = "edit_subcategory";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "📦 Nouvelle sous-catégorie :", {
-          reply_markup: subcategoryKeyboard(entry.category),
-        });
-      }
+  if (field === "image") {
+    state.step = "edit_image";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "🖼️ Nouvelle URL image ?\n\nEnvoie `-` pour enlever l’image.", {
+      parse_mode: "Markdown",
+      reply_markup: wizardButtons(),
+    });
+  }
 
-      if (field === "prices") {
-        const entry = await dbGetEntryById(id);
-        if (!entry) throw new Error("Fiche introuvable.");
-        state.data.quantity_options = makeQuantityOptions(entry);
-        state.step = "edit_q10";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "💸 Nouveau contenu pour 10g : Prix + description, ou `-`", {
-          parse_mode: "Markdown",
-          reply_markup: wizardButtons(),
-        });
-      }
+  if (field === "micron") {
+    state.step = "edit_micron";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "🧪 Nouveau micron ?\n\nEnvoie `-` si aucun.", {
+      parse_mode: "Markdown",
+      reply_markup: wizardButtons(),
+    });
+  }
 
-      if (field === "status") {
-        state.step = "status";
-        adminWizard.set(chatId, state);
-        return bot.sendMessage(chatId, "Choisis le nouveau statut :", {
-          reply_markup: statusKeyboard(),
-        });
-      }
-    }
+  if (field === "category") {
+    state.step = "edit_category";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "🌿 Nouvelle catégorie :", {
+      reply_markup: categoryKeyboard(),
+    });
+  }
 
+  if (field === "subcategory") {
+    const entry = await dbGetEntryById(id);
+    if (!entry) throw new Error("Fiche introuvable.");
+    state.data.category = entry.category;
+    state.step = "edit_subcategory";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "📦 Nouvelle sous-catégorie :", {
+      reply_markup: subcategoryKeyboard(entry.category),
+    });
+  }
+
+  if (field === "prices") {
+    const entry = await dbGetEntryById(id);
+    if (!entry) throw new Error("Fiche introuvable.");
+    state.data.quantity_options = makeQuantityOptions(entry);
+    state.step = "edit_q10";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "💸 Nouveau contenu pour 10g : Prix + description, ou `-`", {
+      parse_mode: "Markdown",
+      reply_markup: wizardButtons(),
+    });
+  }
+
+  if (field === "status") {
+    state.step = "status";
+    adminWizard.set(chatId, state);
+    return bot.sendMessage(chatId, "Choisis le nouveau statut :", {
+      reply_markup: statusKeyboard(),
+    });
+  }
+}
     if (data === "namek_delete_entry") {
       const { rows, total } = await dbListEntriesPage(0, ENTRY_PAGE_SIZE);
       if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
@@ -1474,7 +1489,7 @@ bot.on("callback_query", async (query) => {
       });
     }
   } catch (e) {
-    console.error("❌ Erreur callback :", e);
+    console.error("❌ Erreur callback :", e?.response?.body || e.message || e);
     clearWizard(chatId);
     return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, query.from));
   }
