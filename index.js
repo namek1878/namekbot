@@ -1826,14 +1826,16 @@ bot.on("message", async (msg) => {
           );
         }
 
-        const updated = await dbApplyPromotionPrices(state.data.id, state.data.promo_prices);
-        clearWizard(chatId);
+       const updated = await dbApplyPromotionPrices(state.data.id, state.data.promo_prices);
 
-        await dbLogAction(msg.from.id, "apply_promotion_prices", "entry", updated.id, {
-          status: updated.status,
-          promo_prices: state.data.promo_prices,
-        });
+await broadcastPromoEntry(updated, msg.from.id);
 
+clearWizard(chatId);
+
+await dbLogAction(msg.from.id, "apply_promotion_prices", "entry", updated.id, {
+  status: updated.status,
+  promo_prices: state.data.promo_prices,
+});
         return bot.sendMessage(
           chatId,
           `✅ Promotion appliquée.\n\nTitre : ${updated.title}\nStatut : ${updated.status}`,
