@@ -1016,8 +1016,7 @@ bot.on("callback_query", async (query) => {
   }
 
 
-
-    if (data === "namek_contact") {
+if (data === "namek_contact") {
   return bot.sendMessage(
     chatId,
     "📡 *Canal de communication sécurisé de Namek*\n\n" +
@@ -1028,7 +1027,7 @@ bot.on("callback_query", async (query) => {
     "3️⃣ Lance une nouvelle conversation\n" +
     "4️⃣ Colle ce code pour établir la communication\n\n" +
     "*Code Session :*\n" +
-    "`" + SESSION_CONTACT + "`\n\n" +
+    "```\n" + SESSION_CONTACT + "\n```\n\n" +
     "Une fois le message envoyé, la communication avec Namek pourra commencer.\n\n" +
     "🟢 Support disponible *7j/7*.",
     {
