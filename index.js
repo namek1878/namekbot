@@ -2,7 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
-
+const WELCOME_IMAGE_URL = process.env.WELCOME_IMAGE_URL || "";
 const app = express();
 
 app.use(express.json());
@@ -858,21 +858,37 @@ app.post("/api/track", async (req, res) => {
 
 /* ================== MENUS ================== */
 function sendPublicMenu(chatId) {
-  return bot.sendMessage(
-    chatId,
-    "🟢 *Bienvenue sur la planète Namek*\n\nChoisis une action 👇",
-    {
+  const caption = [
+    "🟢 *Bienvenue sur la planète Namek*",
+    "",
+    "Les capteurs de la planète sont désormais synchronisés.",
+    "Accède aux archives énergétiques, détecte les nouvelles ressources",
+    "et explore les signaux actifs de Namek.",
+    "",
+    "Choisis une action pour commencer 👇",
+  ].join("\n");
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
+      [{ text: "ℹ️ Informations", callback_data: "namek_info" }],
+      [{ text: "📩 Nous contacter", callback_data: "namek_contact" }],
+      [{ text: "📢 Nous suivre", callback_data: "namek_follow" }],
+    ],
+  };
+
+  if (WELCOME_IMAGE_URL) {
+    return bot.sendPhoto(chatId, WELCOME_IMAGE_URL, {
+      caption,
       parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🌍 Ouvrir Namek", web_app: { url: WEBAPP_URL } }],
-          [{ text: "ℹ️ Informations", callback_data: "namek_info" }],
-          [{ text: "📩 Nous contacter", callback_data: "namek_contact" }],
-          [{ text: "📢 Nous suivre", callback_data: "namek_follow" }],
-        ],
-      },
-    }
-  );
+      reply_markup: replyMarkup,
+    });
+  }
+
+  return bot.sendMessage(chatId, caption, {
+    parse_mode: "Markdown",
+    reply_markup: replyMarkup,
+  });
 }
 
 function sendAdminMenu(chatId) {
@@ -967,18 +983,61 @@ bot.on("callback_query", async (query) => {
 
   const data = query.data || "";
 
+
   try {
-    if (data === "namek_info") {
-      return bot.sendMessage(chatId, "ℹ️ Informations sur Namek...\n\n(Texte à personnaliser)", {
-        reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] },
-      });
-    }
+  if (data === "namek_info") {
+    return bot.sendMessage(
+      chatId,
+      "ℹ️ *Centre d'informations de Namek*\n\n" +
+      "Les archives de la planète sont accessibles *7 jours sur 7*.\n\n" +
+      "🛰️ *Canal officiel*\n" +
+      "Les annonces importantes, nouveautés et signaux de promotion\n" +
+      "sont publiés directement dans le canal.\n\n" +
+      "📩 *Besoin d'aide ?*\n" +
+      "N'hésite pas à nous contacter si tu as une question.\n" +
+      "Toutes les informations de contact se trouvent dans la section *Contact*.\n\n" +
+      "Le radar de Namek reste actif en permanence.",
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📢 Canal officiel", url: "https://t.me/toncanal" }],
+            [{ text: "📩 Contact", callback_data: "namek_contact" }],
+            [{ text: "← Retour", callback_data: "namek_back_public" }],
+          ],
+        },
+      }
+    );
+  }
+
+
 
     if (data === "namek_contact") {
-      return bot.sendMessage(chatId, "📩 Nous contacter :\nTelegram : @nameksupport\nEmail : contact@namek.ch", {
-        reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] },
-      });
+  return bot.sendMessage(
+    chatId,
+    "📡 *Canal de communication sécurisé de Namek*\n\n" +
+    "Pour contacter le support utilise l'application *Session*.\n\n" +
+    "*Étapes :*\n" +
+    "1️⃣ Copie le code ci-dessous\n" +
+    "2️⃣ Ouvre l'application *Session*\n" +
+    "3️⃣ Lance une nouvelle conversation\n" +
+    "4️⃣ Colle ce code pour établir la communication\n\n" +
+    "*Code Session :*\n" +
+    "`" + SESSION_CONTACT + "`\n\n" +
+    "Une fois le message envoyé, la communication avec Namek pourra commencer.\n\n" +
+    "🟢 Support disponible *7j/7*.",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📲 Télécharger Session", url: "https://getsession.org/download" }],
+          [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
+          [{ text: "← Retour", callback_data: "namek_back_public" }]
+        ]
+      }
     }
+  );
+}
 
     if (data === "namek_follow") {
       return bot.sendMessage(chatId, "📢 Nous suivre :\nInstagram : @namek_official\nTelegram : t.me/namekchannel", {
