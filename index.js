@@ -1001,7 +1001,7 @@ bot.on("callback_query", async (query) => {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "📢 Canal officiel", url: "https://telegram.org/a/#-1002595887739" }],
+            [{ text: "📢 Canal officiel", url: "https://t.me/+8ghmYKNWhFNjNGE0" }],
             [{ text: "📩 Contact", callback_data: "namek_contact" }],
             [{ text: "← Retour", callback_data: "namek_back_public" }],
           ],
@@ -1955,5 +1955,4 @@ app.listen(PORT, () => {
   console.log(`✅ Serveur Namek lancé sur port ${PORT}`);
   console.log(`🌍 WebApp : ${WEBAPP_URL}`);
   console.log("🤖 Bot Telegram lancé");
-
 });
