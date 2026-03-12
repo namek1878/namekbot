@@ -46,10 +46,48 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { persistSession: false },
 });
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+const bot = new TelegramBot(TOKEN, {
+  polling: {
+    autoStart: true,
+    params: {
+      timeout: 10,
+    },
+  },
+});
+
+/* ================== SAFETY LOGS ================== */
+(async () => {
+  try {
+    await bot.deleteWebHook();
+    console.log("✅ Webhook supprimé");
+  } catch (e) {
+    console.error("⚠️ Impossible de supprimer le webhook :", e.message);
+  }
+})();
+
+bot.on("polling_error", (err) => {
+  console.error("❌ Polling error:", err?.message || err);
+});
+
+bot.on("webhook_error", (err) => {
+  console.error("❌ Webhook error:", err?.message || err);
+});
+
+bot.on("error", (err) => {
+  console.error("❌ Bot error:", err?.message || err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
+});
 
 /* ================== CONFIG ================== */
 const QUANTITIES_DEFAULT = ["10g", "25g", "50g", "100g", "200g", "300g", "400g", "500g"];
+const ENTRY_PAGE_SIZE = 5;
 
 const CATEGORY_LABELS = {
   weed: "🌿 Weed",
@@ -234,6 +272,27 @@ function defaultWebappMarkup() {
   };
 }
 
+function buildPagedEntryKeyboard(rows, page, totalCount, prefix, icon = "✏️") {
+  const keyboard = rows.map((entry) => [
+    { text: `${icon} ${entry.title}`, callback_data: `${prefix}${entry.id}` },
+  ]);
+
+  const nav = [];
+
+  if (page > 0) {
+    nav.push({ text: "⬅️ Précédent", callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page - 1}` });
+  }
+
+  if ((page + 1) * ENTRY_PAGE_SIZE < totalCount) {
+    nav.push({ text: "➡️ Suivant", callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page + 1}` });
+  }
+
+  if (nav.length) keyboard.push(nav);
+  keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+
+  return { inline_keyboard: keyboard };
+}
+
 /* ================== KEYBOARDS ================== */
 function wizardButtons() {
   return {
@@ -315,24 +374,41 @@ function editFieldKeyboard(entryId) {
   };
 }
 
-/* ================== ADMIN ================== */
+/* ================== ADMIN CACHE ================== */
+const adminCache = new Map();
+
 async function isAdmin(from) {
   const telegramId = Number(from?.id || 0);
   if (!telegramId) return false;
-  if (ADMIN_TELEGRAM_ID && telegramId === ADMIN_TELEGRAM_ID) return true;
+
+  if (ADMIN_TELEGRAM_ID && telegramId === ADMIN_TELEGRAM_ID) {
+    return true;
+  }
+
+  const cached = adminCache.get(telegramId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
 
   const { data, error } = await sb
     .from("namek_admins")
-    .select("telegram_id, active")
+    .select("telegram_id")
     .eq("telegram_id", telegramId)
     .eq("active", true)
     .maybeSingle();
 
+  const value = !error && !!data;
+
+  adminCache.set(telegramId, {
+    value,
+    expiresAt: Date.now() + 60 * 1000,
+  });
+
   if (error) {
     console.error("Erreur vérification admin :", error.message);
-    return false;
   }
-  return !!data;
+
+  return value;
 }
 
 /* ================== LOGS ================== */
@@ -352,63 +428,99 @@ async function dbLogAction(adminTelegramId, action, targetType = "", targetId = 
 
 /* ================== DB ================== */
 async function dbRegisterUser(from) {
-  if (!from?.id) return null;
+  if (!from?.id) return;
 
   try {
-    const { data, error } = await sb
+    const { error } = await sb
       .from("namek_users")
       .upsert([{
         telegram_id: Number(from.id),
         username: safeText(from.username || ""),
         first_name: safeText(from.first_name || ""),
-      }], { onConflict: "telegram_id" })
-      .select("*")
-      .single();
+      }], { onConflict: "telegram_id" });
 
     if (error) throw error;
-    return data;
   } catch (e) {
     console.error("Erreur register user:", e.message);
-    return null;
   }
 }
 
 async function dbListUsers() {
-  const { data, error } = await sb.from("namek_users").select("*").order("created_at", { ascending: false });
+  const { data, error } = await sb
+    .from("namek_users")
+    .select("telegram_id,username,first_name,created_at")
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
 
 async function dbListEntries() {
-  const { data, error } = await sb.from("namek_entries").select("*").order("created_at", { ascending: false });
+  const { data, error } = await sb
+    .from("namek_entries")
+    .select("id,title,category,subcategory,status")
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
+}
+
+async function dbListEntriesPage(page = 0, pageSize = ENTRY_PAGE_SIZE) {
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await sb
+    .from("namek_entries")
+    .select("id,title", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+
+  return {
+    rows: data || [],
+    total: count || 0,
+  };
 }
 
 async function dbListPromotionEntries() {
   const { data, error } = await sb
     .from("namek_entries")
-    .select("*")
+    .select("id,title,image_url,category,subcategory,micron,description,quantity_options")
     .eq("status", "promotion")
     .order("updated_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
 
 async function dbListPublicEntries() {
-  const { data, error } = await sb.from("v_namek_entries").select("*").order("created_at", { ascending: false });
+  const { data, error } = await sb
+    .from("v_namek_entries")
+    .select("id,title,slug,image_url,category,subcategory,micron,description,thc,advice,terpenes,aroma,effects,status,is_featured,quantity_options,visible_quantities,active,created_at,updated_at")
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
 
 async function dbGetEntryById(id) {
-  const { data, error } = await sb.from("namek_entries").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await sb
+    .from("namek_entries")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
   if (error) throw error;
   return data;
 }
 
 async function dbListPasswords() {
-  const { data, error } = await sb.from("namek_passwords").select("*").order("created_at", { ascending: false });
+  const { data, error } = await sb
+    .from("namek_passwords")
+    .select("id,password,active,created_at")
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
@@ -417,32 +529,46 @@ async function dbAddPassword(password) {
   const { data, error } = await sb
     .from("namek_passwords")
     .insert([{ password: safeText(password), active: true }])
-    .select("*")
+    .select("id,password")
     .single();
+
   if (error) throw error;
   return data;
 }
 
 async function dbDeletePassword(password) {
-  const { error } = await sb.from("namek_passwords").delete().eq("password", safeText(password));
+  const { error } = await sb
+    .from("namek_passwords")
+    .delete()
+    .eq("password", safeText(password));
+
   if (error) throw error;
   return true;
 }
 
 async function dbDeleteEntry(id) {
-  const { error } = await sb.from("namek_entries").delete().eq("id", id);
+  const { error } = await sb
+    .from("namek_entries")
+    .delete()
+    .eq("id", id);
+
   if (error) throw error;
   return true;
 }
 
 async function dbUpdateEntry(id, patch) {
-  const payload = { ...patch, updated_at: new Date().toISOString() };
+  const payload = {
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+
   const { data, error } = await sb
     .from("namek_entries")
     .update(payload)
     .eq("id", id)
     .select("*")
     .single();
+
   if (error) throw error;
   return data;
 }
@@ -568,6 +694,7 @@ async function sendPromoNotificationToUser(telegramId, entry) {
 async function notifyAllUsersNewEntry(entry, excludeTelegramId = 0) {
   try {
     const users = await dbListUsers();
+
     for (const user of users) {
       const telegramId = Number(user.telegram_id || 0);
       if (!telegramId) continue;
@@ -799,11 +926,12 @@ function getCommandsText() {
 }
 
 /* ================== BOT COMMANDS ================== */
-bot.onText(/\/start/, async (msg) => {
+bot.onText(/^\/start(?:\s+.*)?$/, async (msg) => {
   try {
     await dbRegisterUser(msg.from);
     await sendStartMenu(msg.chat.id, msg.from);
   } catch (e) {
+    console.error("❌ Erreur /start :", e.message);
     await bot.sendMessage(msg.chat.id, `❌ Erreur : ${e.message}`);
   }
 });
@@ -965,7 +1093,7 @@ bot.on("callback_query", async (query) => {
           return bot.sendMessage(chatId, "Aucune fiche en promotion actuellement.");
         }
 
-        const keyboard = promoEntries.slice(0, 20).map((entry) => [
+        const keyboard = promoEntries.slice(0, 10).map((entry) => [
           { text: `🏷️ ${entry.title}`, callback_data: `namek_pick_promo_broadcast_${entry.id}` },
         ]);
         keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
@@ -1062,16 +1190,24 @@ bot.on("callback_query", async (query) => {
     }
 
     if (data === "namek_edit_entry") {
-      const rows = await dbListEntries();
+      const { rows, total } = await dbListEntriesPage(0, ENTRY_PAGE_SIZE);
       if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à modifier.");
 
-      const keyboard = rows.slice(0, 20).map((entry) => [
-        { text: `✏️ ${entry.title}`, callback_data: `namek_pick_edit_${entry.id}` },
-      ]);
-      keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+      return bot.sendMessage(chatId, "Choisis une fiche à modifier :", {
+        reply_markup: buildPagedEntryKeyboard(rows, 0, total, "namek_pick_edit_", "✏️"),
+      });
+    }
+
+    if (data.startsWith("namek_edit_page_")) {
+      const page = Number(data.replace("namek_edit_page_", "")) || 0;
+      const { rows, total } = await dbListEntriesPage(page, ENTRY_PAGE_SIZE);
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Plus de fiches.");
+      }
 
       return bot.sendMessage(chatId, "Choisis une fiche à modifier :", {
-        reply_markup: { inline_keyboard: keyboard },
+        reply_markup: buildPagedEntryKeyboard(rows, page, total, "namek_pick_edit_", "✏️"),
       });
     }
 
@@ -1098,11 +1234,9 @@ bot.on("callback_query", async (query) => {
       if (!state || state.type !== "edit_entry" || state.step !== "field") return;
 
       const rest = data.replace("namek_edit_field_", "");
-      const lastUnderscore = rest.lastIndexOf("_");
-      if (lastUnderscore === -1) return;
-
-      const field = rest.slice(0, lastUnderscore);
-      const id = rest.slice(lastUnderscore + 1);
+      const parts = rest.split("_");
+      const id = parts.pop();
+      const field = parts.join("_");
 
       pushHistory(chatId, state);
       state.data.id = id;
@@ -1179,16 +1313,24 @@ bot.on("callback_query", async (query) => {
     }
 
     if (data === "namek_delete_entry") {
-      const rows = await dbListEntries();
+      const { rows, total } = await dbListEntriesPage(0, ENTRY_PAGE_SIZE);
       if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
 
-      const keyboard = rows.slice(0, 20).map((entry) => [
-        { text: `🗑️ ${entry.title}`, callback_data: `namek_delete_entry_id_${entry.id}` },
-      ]);
-      keyboard.push([{ text: "❌ Annuler", callback_data: "namek_cancel" }]);
+      return bot.sendMessage(chatId, "Choisis la fiche à supprimer :", {
+        reply_markup: buildPagedEntryKeyboard(rows, 0, total, "namek_delete_entry_id_", "🗑️"),
+      });
+    }
+
+    if (data.startsWith("namek_delete_page_")) {
+      const page = Number(data.replace("namek_delete_page_", "")) || 0;
+      const { rows, total } = await dbListEntriesPage(page, ENTRY_PAGE_SIZE);
+
+      if (!rows.length) {
+        return bot.sendMessage(chatId, "Plus de fiches.");
+      }
 
       return bot.sendMessage(chatId, "Choisis la fiche à supprimer :", {
-        reply_markup: { inline_keyboard: keyboard },
+        reply_markup: buildPagedEntryKeyboard(rows, page, total, "namek_delete_entry_id_", "🗑️"),
       });
     }
 
@@ -1196,6 +1338,7 @@ bot.on("callback_query", async (query) => {
       const id = data.replace("namek_delete_entry_id_", "");
       await dbDeleteEntry(id);
       await dbLogAction(query.from.id, "delete_entry", "entry", id, {});
+
       return bot.sendMessage(chatId, "✅ Fiche supprimée.").then(() => sendStartMenu(chatId, query.from));
     }
 
@@ -1331,6 +1474,7 @@ bot.on("callback_query", async (query) => {
       });
     }
   } catch (e) {
+    console.error("❌ Erreur callback :", e);
     clearWizard(chatId);
     return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, query.from));
   }
@@ -1529,9 +1673,7 @@ bot.on("message", async (msg) => {
           slug: created.slug,
         });
 
-        await notifyAllUsersNewEntry(created, msg.from.id);
-
-        return bot.sendMessage(
+        bot.sendMessage(
           chatId,
           `✅ Fiche créée !\n\nTitre : ${created.title}\nCatégorie : ${created.category}\nSous-catégorie : ${created.subcategory || "-"}\nID : ${created.id}`,
           {
@@ -1540,6 +1682,12 @@ bot.on("message", async (msg) => {
             },
           }
         ).then(() => sendStartMenu(chatId, msg.from));
+
+        notifyAllUsersNewEntry(created, msg.from.id).catch((e) => {
+          console.error("Erreur notification globale :", e.message);
+        });
+
+        return;
       }
     }
 
@@ -1720,6 +1868,7 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(chatId, "✅ Fiche modifiée.").then(() => sendStartMenu(chatId, msg.from));
     }
   } catch (e) {
+    console.error("❌ Erreur message handler :", e);
     clearWizard(chatId);
     return bot.sendMessage(chatId, `❌ Erreur : ${e.message}`).then(() => sendStartMenu(chatId, msg.from));
   }
