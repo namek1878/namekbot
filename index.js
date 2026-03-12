@@ -2,7 +2,13 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
+
 const WELCOME_IMAGE_URL = process.env.WELCOME_IMAGE_URL || "";
+const CONTACT_TELEGRAM = process.env.CONTACT_TELEGRAM || "@nameksupport";
+const CONTACT_CHANNEL = process.env.CONTACT_CHANNEL || "https://t.me/+8ghmYKNWhFNjNGE0";
+const CONTACT_INSTAGRAM = process.env.CONTACT_INSTAGRAM || "@namek_official";
+const SESSION_CONTACT = process.env.SESSION_CONTACT || "@nameksupport";
+
 const app = express();
 
 app.use(express.json());
@@ -18,7 +24,6 @@ app.get("/ping", (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
 /* ================== ENV ================== */
 const TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -1040,10 +1045,30 @@ bot.on("callback_query", async (query) => {
 }
 
     if (data === "namek_follow") {
-      return bot.sendMessage(chatId, "📢 Nous suivre :\nInstagram : @namek_official\nTelegram : t.me/namekchannel", {
-        reply_markup: { inline_keyboard: [[{ text: "← Retour", callback_data: "namek_back_public" }]] },
-      });
+  return bot.sendMessage(
+    chatId,
+    [
+      "🟢 *Canal officiel de la planète Namek*",
+      "",
+      "Rejoins la zone de transmission pour suivre :",
+      "• les nouveaux arrivages",
+      "• les promotions actives",
+      "• les annonces spéciales",
+      "",
+      "Les signaux de Namek passent par ici 👇",
+    ].join("\n"),
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛸 Rejoindre le canal Namek", url: CONTACT_CHANNEL }],
+          [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
+          [{ text: "← Retour", callback_data: "namek_back_public" }],
+        ],
+      },
     }
+  );
+}
 
     if (data === "namek_back_public") {
       return sendPublicMenu(chatId);
