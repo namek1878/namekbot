@@ -10,7 +10,6 @@
   const norm = (v) => safeStr(v).trim().toLowerCase();
 
   const listEl = $("list");
-  const carouselList = $("carouselList");
   const searchInput = $("searchInput");
   const clearBtn = $("clearBtn");
   const categoryFilter = $("categoryFilter");
@@ -201,7 +200,6 @@
 
       fillSubcategoryFilterOptions();
       renderSpotlights();
-      renderCarousel();
       renderList();
 
       const first = filteredEntries()[0] || allEntries[0];
@@ -389,41 +387,6 @@
     });
   }
 
-  function renderCarousel() {
-    if (!carouselList) return;
-    carouselList.innerHTML = "";
-
-    const featured = sortNewestFirst(
-      allEntries.filter((entry) =>
-        entry.is_featured ||
-        entry.status === "mise_en_avant" ||
-        entry.status === "nouveaute" ||
-        entry.status === "promotion"
-      )
-    ).slice(0, 8);
-
-    const source = featured.length ? featured : allEntries.slice(0, 8);
-
-    if (!source.length) {
-      carouselList.innerHTML = `<div class="muted">Aucune fiche à afficher.</div>`;
-      return;
-    }
-
-    source.forEach((entry) => {
-      const card = document.createElement("div");
-      card.className = "list-item card-clickable";
-      card.innerHTML = `
-        <div class="list-item-top">
-          <div class="list-item-title large-title">${escapeHtml(entry.title)}</div>
-          <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
-        </div>
-        <div class="list-item-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
-      `;
-      card.addEventListener("click", () => selectEntry(entry, { scroll: true }));
-      carouselList.appendChild(card);
-    });
-  }
-
   function renderList() {
     if (!listEl) return;
     listEl.innerHTML = "";
@@ -437,14 +400,22 @@
 
     filtered.forEach((entry) => {
       const item = document.createElement("div");
-      item.className = `list-item card-clickable${selected?.id === entry.id ? " active" : ""}`;
+      item.className = `product-card card-clickable${selected?.id === entry.id ? " selected" : ""}`;
+
+      const image = entry.image_url
+        ? `<img class="product-card-img" src="${escapeHtml(entry.image_url)}" alt="${escapeHtml(entry.title)}" />`
+        : `<div class="product-card-img product-card-empty">Aucune image</div>`;
 
       item.innerHTML = `
-        <div class="list-item-top">
-          <div class="list-item-title large-title">${escapeHtml(entry.title)}</div>
-          <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
+        ${image}
+        <div class="product-card-body">
+          <div class="product-card-top">
+            <div class="product-card-title">${escapeHtml(entry.title)}</div>
+            <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
+          </div>
+          <div class="product-card-meta">${escapeHtml(formatEntryMeta(entry))}</div>
+          <div class="product-card-desc">${escapeHtml(entry.description || "Aucune description.")}</div>
         </div>
-        <div class="list-item-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
       `;
 
       item.addEventListener("click", () => selectEntry(entry, { scroll: true }));
@@ -470,6 +441,15 @@
       quantityWrap.innerHTML = "";
       quantityWrap.style.display = "none";
     }
+  }
+
+  function triggerScouterAnimation() {
+    const shell = document.querySelector(".scouter-shell");
+    if (!shell) return;
+
+    shell.classList.remove("scouter-active");
+    void shell.offsetWidth;
+    shell.classList.add("scouter-active");
   }
 
   function selectEntry(entry, options = {}) {
@@ -535,6 +515,7 @@
     }
 
     renderList();
+    triggerScouterAnimation();
 
     if (scroll) {
       setTimeout(() => scrollToDetails(), 60);

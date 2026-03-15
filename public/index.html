@@ -22,118 +22,106 @@
   </div>
 
   <header class="py-4">
-  <div class="container">
-    <div class="namek-hero">
-      <div class="hero-grid">
-
-        <div class="hero-left">
-
-          <h1 class="namek-title">
-            Bienvenue sur la planète <span>Namek</span>
-          </h1>
-
-          <p class="namek-subtitle">
-            Accède aux archives énergétiques de Namek, découvre les nouvelles
-            ressources détectées, repère les promotions actives et explore
-            facilement chaque catégorie et sous-catégorie de la planète.
-          </p>
-
+    <div class="container">
+      <div class="namek-hero">
+        <div class="planet-orbit">
+          <div class="namek-planet"></div>
+          <div class="planet-ring"></div>
         </div>
 
-        <div class="hero-right">
+        <div class="hero-grid">
+          <div class="hero-left">
+            <div class="hero-badge">Dragon Ball Z • Planète Namek</div>
 
-          <div class="hero-mini">
-            <strong>Scanner de recherche</strong>
-            <p>
-              Localise rapidement une énergie par nom,
-              catégorie ou sous-catégorie.
+            <h1 class="namek-title">
+              Bienvenue sur la planète <span>Namek</span>
+            </h1>
+
+            <p class="namek-subtitle">
+              Explore les archives énergétiques, filtre rapidement les fiches,
+              détecte les nouveautés et affiche les détails avec un effet scouter.
             </p>
           </div>
 
-          <div class="hero-mini">
-            <div class="hero-mini-top">Zone spéciale</div>
-            <strong>Capsule Namek</strong>
-            <p>
-              Détecte les nouvelles énergies, les promotions actives
-              et les ressources mises en avant sur la planète.
-            </p>
+          <div class="hero-right">
+            <div class="hero-mini">
+              <strong>Scanner de recherche</strong>
+              <p>Filtre par texte, catégorie, sous-catégorie et statut.</p>
+            </div>
+
+            <div class="hero-mini">
+              <div class="hero-mini-top">Zone spéciale</div>
+              <strong>Signal Namek</strong>
+              <p>Nouveautés, promotions et fiches mises en avant détectées ici.</p>
+            </div>
           </div>
-
         </div>
-
       </div>
     </div>
-  </div>
-</header>
+  </header>
 
   <main class="py-3">
     <div class="container">
       <section class="page-grid">
-        <div class="namek-panel">
+        <div class="left-column">
           <div class="promo-grid">
-           <div class="spotlight-box new">
-  <div class="spotlight-content">
+            <div class="spotlight-box new">
+              <div class="spotlight-content">
+                <div class="spotlight-top">🆕 Arrivage détecté sur Namek</div>
+                <div class="spotlight-title">📡 Signal énergétique repéré</div>
+                <div class="spotlight-sub">
+                  Les nouvelles fiches détectées apparaissent ici en priorité.
+                </div>
 
-    <div class="spotlight-top">🆕 Arrivage détecté sur Namek</div>
+                <div id="newEntries" class="spotlight-empty">
+                  Aucun nouvel arrivage détecté pour le moment.
+                </div>
 
-    <div class="spotlight-title">
-  📡 Signal énergétique repéré
-</div>
-
-    <div class="spotlight-sub">
-  « Sur <strong>Namek</strong>, chaque nouvelle énergie finit toujours par être détectée. »
-</div>
-
-    <div id="newEntries" class="spotlight-empty">
-      Aucun nouvel arrivage détecté pour le moment.
-    </div>
-
-    <div id="weekNewEntries" class="spotlight-empty" style="margin-top:10px;">
-      Aucune énergie nouvelle détectée cette semaine.
-    </div>
-
-  </div>
-</div>
+                <div id="weekNewEntries" class="spotlight-empty" style="margin-top:10px;">
+                  Aucune énergie nouvelle détectée cette semaine.
+                </div>
+              </div>
+            </div>
 
             <div class="spotlight-box promo">
-  <div class="spotlight-content">
-    <div class="spotlight-top">🏷️ Signaux promo détectés</div>
-    <div class="spotlight-title">Offres énergétiques de Namek</div>
-    <div class="spotlight-sub">
-  Lorsque des produits passent en <strong>promotion</strong>, le radar énergétique
-  de Namek détecte immédiatement ces signaux et les affiche ici en priorité.
-</div>
-    <div id="promoEntries" class="spotlight-empty">
-      Aucun signal promotionnel détecté pour le moment.
-    </div>
-  </div>
-</div>
-</div>
+              <div class="spotlight-content">
+                <div class="spotlight-top">🏷️ Signaux promo détectés</div>
+                <div class="spotlight-title">Offres énergétiques de Namek</div>
+                <div class="spotlight-sub">
+                  Les fiches en promotion s’affichent ici avec priorité.
+                </div>
 
-<div class="namek-card mb-3">
-  <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-    <div>
-      <div class="section-title">Scanner de recherche</div>
-      <div class="muted">Nom, catégorie et sous-catégorie</div>
-    </div>
+                <div id="promoEntries" class="spotlight-empty">
+                  Aucun signal promotionnel détecté pour le moment.
+                </div>
+              </div>
+            </div>
+          </div>
 
-    <button id="clearBtn" class="btn-soft" type="button">
-      Réinitialiser
-    </button>
-  </div>
-
-  <div class="filter-grid">
-    <div>
-      <div class="filter-title">Recherche énergétique</div>
-      <input
-        id="searchInput"
-        type="search"
-        placeholder="Scanner un produit."
-        autocomplete="off"
-      />
-    </div>
-
+          <div class="namek-card mb-3">
+            <div class="filter-head">
               <div>
+                <div class="section-title">Scanner de recherche</div>
+                <div class="muted">Nom, catégorie, sous-catégorie, tri</div>
+              </div>
+
+              <button id="clearBtn" class="btn-soft" type="button">
+                Réinitialiser
+              </button>
+            </div>
+
+            <div class="filter-grid top-filters">
+              <div class="filter-block filter-search">
+                <div class="filter-title">Recherche énergétique</div>
+                <input
+                  id="searchInput"
+                  type="search"
+                  placeholder="Scanner un produit"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="filter-block">
                 <div class="filter-title">Catégorie</div>
                 <select id="categoryFilter">
                   <option value="">Toutes</option>
@@ -146,7 +134,7 @@
                 </select>
               </div>
 
-              <div>
+              <div class="filter-block">
                 <div class="filter-title">Sous-catégorie</div>
                 <select id="subcategoryFilter">
                   <option value="">Toutes</option>
@@ -155,71 +143,74 @@
             </div>
 
             <div class="chip-row">
-  <button id="promoToggle" class="chip-btn" type="button">🏷️ Signaux promo</button>
-  <button id="newToggle" class="chip-btn" type="button">🆕 Nouvelles énergies</button>
-</div>
-</div>
+              <button id="promoToggle" class="chip-btn" type="button">🏷️ Signaux promo</button>
+              <button id="newToggle" class="chip-btn" type="button">🆕 Nouvelles énergies</button>
+            </div>
+          </div>
 
-<div class="namek-mini">
-  <div class="section-title">Archives de Namek</div>
-  <div id="listSkeleton" class="muted" style="display:none;">Analyse des énergies en cours...</div>
-  <div id="list"></div>
-</div>
-</div>
+          <div class="namek-mini">
+            <div class="section-title">Catalogue de Namek</div>
+            <div id="listSkeleton" class="muted" style="display:none;">Analyse des énergies en cours...</div>
+            <div id="list" class="card-grid"></div>
+          </div>
+        </div>
 
-<div class="namek-panel" id="detailsPanel">
-  <div id="detailsSkeleton" class="muted" style="display:none;">
-    Analyse de la ressource en cours...
-  </div>
+        <div class="right-column">
+          <div class="namek-panel details-panel-shell" id="detailsPanel">
+            <div id="detailsSkeleton" class="muted" style="display:none;">
+              Analyse de la ressource en cours...
+            </div>
 
-  <div id="detailsReal">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-      <div>
-        <div id="pokeId" class="muted small"></div>
-        <h2 id="pokeName" class="detail-title">Sélectionne une énergie de Namek</h2>
-        <div id="pokeType" class="detail-meta detail-meta-strong">—</div>
-      </div>
+            <div id="detailsReal">
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                <div>
+                  <div id="pokeId" class="muted small"></div>
+                  <h2 id="pokeName" class="detail-title">Sélectionne une énergie de Namek</h2>
+                  <div id="pokeType" class="detail-meta detail-meta-strong">—</div>
+                </div>
 
-      <div id="pokeThc" class="detail-status">—</div>
+                <div id="pokeThc" class="detail-status">—</div>
+              </div>
+
+              <div class="detail-image-shell mb-3 scouter-shell">
+                <div class="scouter-line"></div>
+                <img id="pokeImg" class="detail-image" src="" alt="Fiche Namek" style="display:none;" />
+                <div id="placeholder" class="text-center muted">
+                  Aucune ressource sélectionnée.
+                </div>
+              </div>
+
+              <div class="description-box">
+                <pre id="pokeDesc">—</pre>
+              </div>
+
+              <div id="quantityWrap"></div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
+  </main>
 
-    <div class="detail-image-shell mb-3">
-      <img id="pokeImg" class="detail-image" src="" alt="Fiche Namek" style="display:none;" />
-      <div id="placeholder" class="text-center muted">
-        Aucune ressource sélectionnée.
-      </div>
+  <footer class="footer-bar">
+    <div class="container">
+      Namek © <span id="year"></span>
     </div>
+  </footer>
 
-    <div class="description-box">
-      <pre id="pokeDesc">—</pre>
-    </div>
+  <div id="toast">—</div>
 
-    <div id="quantityWrap"></div>
-  </div>
-</div>
-</section>
-</div>
-</main>
+  <nav class="bottom-nav">
+    <button class="bn-item active" type="button">
+      <span class="bn-ico">🌍</span>
+      <span class="bn-txt">Namek</span>
+    </button>
+  </nav>
 
-<footer class="footer-bar">
-  <div class="container">
-    Namek © <span id="year"></span>
-  </div>
-</footer>
-
-<div id="toast">—</div>
-
-<nav class="bottom-nav">
-  <button class="bn-item active" type="button">
-    <span class="bn-ico">🌍</span>
-    <span class="bn-txt">Namek</span>
-  </button>
-</nav>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="/js/namek.js"></script>
-<script>
-  document.getElementById("year").textContent = new Date().getFullYear();
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/namek.js"></script>
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
