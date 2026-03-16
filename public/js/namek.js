@@ -10,30 +10,25 @@
   const norm = (v) => safeStr(v).trim().toLowerCase();
 
   const listEl = $("list");
+  const listSkeleton = $("listSkeleton");
+
   const searchInput = $("searchInput");
   const clearBtn = $("clearBtn");
   const categoryFilter = $("categoryFilter");
   const subcategoryFilter = $("subcategoryFilter");
-  const promoToggle = $("promoToggle");
-  const newToggle = $("newToggle");
+
+  const productModal = $("productModal");
+  const closeModalBtn = $("closeModalBtn");
+  const backModalBtn = $("backModalBtn");
+  const modalBackdrop = $("modalBackdrop");
 
   const pokeName = $("pokeName");
-  const pokeId = $("pokeId");
   const pokeImg = $("pokeImg");
   const placeholder = $("placeholder");
   const pokeType = $("pokeType");
   const pokeThc = $("pokeThc");
   const pokeDesc = $("pokeDesc");
   const quantityWrap = $("quantityWrap");
-
-  const listSkeleton = $("listSkeleton");
-  const detailsSkeleton = $("detailsSkeleton");
-  const detailsReal = $("detailsReal");
-  const detailsPanel = $("detailsPanel");
-
-  const newEntries = $("newEntries");
-  const weekNewEntries = $("weekNewEntries");
-  const promoEntries = $("promoEntries");
 
   const unlockOverlay = $("unlockOverlay");
   const unlockInput = $("unlockInput");
@@ -46,8 +41,6 @@
   let searchQuery = "";
   let selectedCategory = "";
   let selectedSubcategory = "";
-  let onlyPromo = false;
-  let onlyNew = false;
 
   function toast(msg) {
     const el = $("toast");
@@ -56,6 +49,15 @@
     el.classList.add("show");
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.remove("show"), 1800);
+  }
+
+  function escapeHtml(value) {
+    return safeStr(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   function prettify(value) {
@@ -96,52 +98,42 @@
     return "badge-status badge-normal";
   }
 
-  function entryDateValue(entry) {
-    const value = new Date(entry?.created_at || 0).getTime();
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  function sortNewestFirst(entries) {
-    return [...entries].sort((a, b) => entryDateValue(b) - entryDateValue(a));
-  }
-
-  function escapeHtml(value) {
-    return safeStr(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  function getVisibleQuantities(entry) {
-    if (Array.isArray(entry?.quantity_options)) {
-      return entry.quantity_options.filter((q) => {
-        return norm(q?.price) !== "-" || norm(q?.promo_price) || norm(q?.description) !== "-";
-      });
-    }
-    return [];
-  }
-
   function formatEntryMeta(entry) {
     const parts = [
       categoryLabel(entry.category),
       entry.subcategory ? titleCase(entry.subcategory) : "",
       entry.micron ? entry.micron : "",
     ].filter(Boolean);
+
     return parts.join(" • ");
   }
 
-  function scrollToDetails() {
-    const target = detailsPanel || detailsReal;
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  function getVisibleQuantities(entry) {
+    if (!Array.isArray(entry?.quantity_options)) return [];
+
+    return entry.quantity_options.filter((q) => {
+      return norm(q?.price) !== "-" || norm(q?.promo_price) || norm(q?.description) !== "-";
+    });
   }
 
-  function setLoading(on) {
-    if (listSkeleton) listSkeleton.style.display = on ? "block" : "none";
-    if (detailsSkeleton) detailsSkeleton.style.display = on ? "block" : "none";
-    if (detailsReal) detailsReal.style.display = on ? "none" : "block";
+  function showUnlockError(message) {
+    if (!unlockError) return;
+    unlockError.textContent = message;
+    unlockError.style.display = "block";
+  }
+
+  function hideUnlockError() {
+    if (!unlockError) return;
+    unlockError.textContent = "";
+    unlockError.style.display = "none";
+  }
+
+  function isUnlocked() {
+    return localStorage.getItem("namek_unlocked") === "1";
+  }
+
+  function setUnlocked() {
+    localStorage.setItem("namek_unlocked", "1");
   }
 
   async function unlockApp(password) {
@@ -156,28 +148,6 @@
     return !!data.ok;
   }
 
-  function showUnlockError(message) {
-    if (unlockError) {
-      unlockError.textContent = message;
-      unlockError.style.display = "block";
-    }
-  }
-
-  function hideUnlockError() {
-    if (unlockError) {
-      unlockError.textContent = "";
-      unlockError.style.display = "none";
-    }
-  }
-
-  function isUnlocked() {
-    return localStorage.getItem("namek_unlocked") === "1";
-  }
-
-  function setUnlocked() {
-    localStorage.setItem("namek_unlocked", "1");
-  }
-
   async function guardApp() {
     if (isUnlocked()) {
       if (unlockOverlay) unlockOverlay.style.display = "none";
@@ -188,6 +158,10 @@
     return false;
   }
 
+  function setLoading(on) {
+    if (listSkeleton) listSkeleton.style.display = on ? "block" : "none";
+  }
+
   async function loadEntries() {
     setLoading(true);
 
@@ -196,18 +170,10 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-      allEntries = sortNewestFirst(Array.isArray(data) ? data : []);
+      allEntries = Array.isArray(data) ? data : [];
 
       fillSubcategoryFilterOptions();
-      renderSpotlights();
       renderList();
-
-      const first = filteredEntries()[0] || allEntries[0];
-      if (first) {
-        selectEntry(first, { scroll: false });
-      } else {
-        clearDetails();
-      }
     } catch (e) {
       console.error("❌ loadEntries:", e);
       toast("Erreur chargement catalogue");
@@ -216,126 +182,16 @@
     setLoading(false);
   }
 
-  function getLatestNewEntry() {
-    return sortNewestFirst(allEntries.filter((e) => e.status === "nouveaute"))[0] || null;
-  }
-
-  function getWeekNewEntries() {
-    const now = Date.now();
-    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-    return sortNewestFirst(
-      allEntries.filter((entry) => entryDateValue(entry) >= sevenDaysAgo)
-    ).slice(0, 7);
-  }
-
-  function getPromoEntries() {
-    return sortNewestFirst(allEntries.filter((e) => e.status === "promotion")).slice(0, 6);
-  }
-
-  function renderSpotlights() {
-    renderLatestNewEntry();
-    renderWeekNewEntries();
-    renderPromoEntries();
-  }
-
-  function renderLatestNewEntry() {
-    if (!newEntries) return;
-
-    const entry = getLatestNewEntry();
-    if (!entry) {
-      newEntries.className = "spotlight-empty";
-      newEntries.innerHTML = "Aucune nouveauté pour le moment.";
-      return;
-    }
-
-    newEntries.className = "spotlight-entry spotlight-entry-main";
-    newEntries.innerHTML = `
-      <div class="spotlight-clickable">
-        <div class="spotlight-entry-title">${escapeHtml(entry.title)}</div>
-        <div class="spotlight-entry-meta-strong">${escapeHtml(formatEntryMeta(entry))}</div>
-        <div class="spotlight-entry-desc">${escapeHtml(entry.description || "Aucune description.")}</div>
-      </div>
-    `;
-
-    newEntries.onclick = () => selectEntry(entry, { scroll: true });
-  }
-
-  function renderWeekNewEntries() {
-    if (!weekNewEntries) return;
-
-    const entries = getWeekNewEntries();
-    if (!entries.length) {
-      weekNewEntries.className = "spotlight-empty";
-      weekNewEntries.innerHTML = "Aucune nouveauté cette semaine.";
-      return;
-    }
-
-    weekNewEntries.className = "spotlight-week-list";
-    weekNewEntries.innerHTML = entries.map((entry) => `
-      <div class="week-entry" data-entry-id="${escapeHtml(entry.id)}">
-        <div class="week-entry-title">${escapeHtml(entry.title)}</div>
-        <div class="week-entry-meta">${escapeHtml(formatEntryMeta(entry))}</div>
-      </div>
-    `).join("");
-
-    weekNewEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
-      el.addEventListener("click", () => {
-        const entry = allEntries.find((x) => String(x.id) === String(el.dataset.entryId));
-        if (entry) selectEntry(entry, { scroll: true });
-      });
-    });
-  }
-
-  function renderPromoEntries() {
-    if (!promoEntries) return;
-
-    const promos = getPromoEntries();
-    if (!promos.length) {
-      promoEntries.className = "spotlight-empty";
-      promoEntries.innerHTML = "Aucune promotion active pour le moment.";
-      return;
-    }
-
-    promoEntries.className = "promo-list";
-    promoEntries.innerHTML = promos.map((entry) => {
-      const promoLines = getVisibleQuantities(entry)
-        .filter((q) => norm(q.promo_price))
-        .map((q) => `
-          <div class="promo-price-line">
-            <span class="promo-amount">${escapeHtml(q.amount || "-")}</span>
-            <span class="promo-old">${escapeHtml(q.original_price || q.price || "-")}</span>
-            <span class="promo-arrow">→</span>
-            <span class="promo-new">${escapeHtml(q.promo_price || "-")}</span>
-          </div>
-        `)
-        .join("");
-
-      return `
-        <div class="promo-entry-card" data-entry-id="${escapeHtml(entry.id)}">
-          <div class="promo-entry-title">${escapeHtml(entry.title)}</div>
-          <div class="promo-entry-meta">${escapeHtml(formatEntryMeta(entry))}</div>
-          <div class="promo-entry-desc">${escapeHtml(entry.description || "")}</div>
-          ${promoLines ? `<div class="promo-price-box">${promoLines}</div>` : ""}
-        </div>
-      `;
-    }).join("");
-
-    promoEntries.querySelectorAll("[data-entry-id]").forEach((el) => {
-      el.addEventListener("click", () => {
-        const entry = allEntries.find((x) => String(x.id) === String(el.dataset.entryId));
-        if (entry) selectEntry(entry, { scroll: true });
-      });
-    });
-  }
-
   function getAvailableSubcategories(category = "") {
     const source = category
-      ? allEntries.filter((entry) => entry.category === category)
+      ? allEntries.filter((entry) => norm(entry.category) === norm(category))
       : allEntries;
 
-    const items = [...new Set(
-      source.map((entry) => norm(entry.subcategory)).filter(Boolean)
-    )];
+    const items = [
+      ...new Set(
+        source.map((entry) => norm(entry.subcategory)).filter(Boolean)
+      ),
+    ];
 
     return items.sort((a, b) => a.localeCompare(b, "fr"));
   }
@@ -380,10 +236,8 @@
 
       const matchesCategory = !selectedCategory || norm(entry.category) === norm(selectedCategory);
       const matchesSubcategory = !selectedSubcategory || norm(entry.subcategory) === norm(selectedSubcategory);
-      const matchesPromo = !onlyPromo || entry.status === "promotion";
-      const matchesNew = !onlyNew || entry.status === "nouveaute";
 
-      return matchesSearch && matchesCategory && matchesSubcategory && matchesPromo && matchesNew;
+      return matchesSearch && matchesCategory && matchesSubcategory;
     });
   }
 
@@ -394,13 +248,13 @@
     const filtered = filteredEntries();
 
     if (!filtered.length) {
-      listEl.innerHTML = `<div class="muted" style="padding:14px;">Aucune fiche trouvée.</div>`;
+      listEl.innerHTML = `<div class="list-skeleton">Aucun produit trouvé.</div>`;
       return;
     }
 
     filtered.forEach((entry) => {
       const item = document.createElement("div");
-      item.className = `product-card card-clickable${selected?.id === entry.id ? " selected" : ""}`;
+      item.className = "product-card";
 
       const image = entry.image_url
         ? `<img class="product-card-img" src="${escapeHtml(entry.image_url)}" alt="${escapeHtml(entry.title)}" />`
@@ -409,38 +263,16 @@
       item.innerHTML = `
         ${image}
         <div class="product-card-body">
-          <div class="product-card-top">
-            <div class="product-card-title">${escapeHtml(entry.title)}</div>
-            <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
-          </div>
+          <div class="product-card-title">${escapeHtml(entry.title)}</div>
+          <span class="${statusBadgeClass(entry.status)}">${escapeHtml(entryStatusLabel(entry.status))}</span>
           <div class="product-card-meta">${escapeHtml(formatEntryMeta(entry))}</div>
           <div class="product-card-desc">${escapeHtml(entry.description || "Aucune description.")}</div>
         </div>
       `;
 
-      item.addEventListener("click", () => selectEntry(entry, { scroll: true }));
+      item.addEventListener("click", () => openEntryModal(entry));
       listEl.appendChild(item);
     });
-  }
-
-  function clearDetails() {
-    if (pokeName) pokeName.textContent = "Sélectionne une fiche";
-    if (pokeId) pokeId.textContent = "";
-    if (pokeType) pokeType.textContent = "—";
-    if (pokeThc) pokeThc.textContent = "—";
-    if (pokeDesc) pokeDesc.textContent = "—";
-
-    if (pokeImg) {
-      pokeImg.src = "";
-      pokeImg.style.display = "none";
-    }
-
-    if (placeholder) placeholder.style.display = "block";
-
-    if (quantityWrap) {
-      quantityWrap.innerHTML = "";
-      quantityWrap.style.display = "none";
-    }
   }
 
   function triggerScouterAnimation() {
@@ -452,15 +284,36 @@
     shell.classList.add("scouter-active");
   }
 
-  function selectEntry(entry, options = {}) {
-    const { scroll = false } = options;
+  function openModal() {
+    if (!productModal) return;
+    productModal.classList.add("open");
+    productModal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeModal() {
+    if (!productModal) return;
+    productModal.classList.remove("open");
+    productModal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  function openEntryModal(entry) {
     selected = entry;
 
     if (pokeName) pokeName.textContent = entry.title || "—";
-    if (pokeId) pokeId.textContent = "";
     if (pokeType) pokeType.textContent = formatEntryMeta(entry) || "—";
     if (pokeThc) pokeThc.textContent = entryStatusLabel(entry.status);
-    if (pokeDesc) pokeDesc.textContent = entry.description || "—";
+
+    if (pokeDesc) {
+      const lines = [
+        entry.description || "—",
+        "",
+        formatEntryMeta(entry) || "",
+      ].filter(Boolean);
+
+      pokeDesc.textContent = lines.join("\n");
+    }
 
     if (pokeImg) {
       pokeImg.src = entry.image_url || "";
@@ -493,7 +346,7 @@
                 <div class="qty-amount">${escapeHtml(q.amount || "-")}</div>
                 <div class="qty-price promo-price-wrap">
                   <span class="qty-old-price">${escapeHtml(q.original_price || q.price || "-")}</span>
-                  <span class="qty-arrow">→</span>
+                  <span>→</span>
                   <span class="qty-promo-price">${escapeHtml(q.promo_price || "-")}</span>
                 </div>
               </div>
@@ -514,12 +367,8 @@
       }
     }
 
-    renderList();
+    openModal();
     triggerScouterAnimation();
-
-    if (scroll) {
-      setTimeout(() => scrollToDetails(), 60);
-    }
   }
 
   if (searchInput) {
@@ -544,47 +393,24 @@
     });
   }
 
-  if (promoToggle) {
-    promoToggle.addEventListener("click", () => {
-      onlyPromo = !onlyPromo;
-      if (onlyPromo) onlyNew = false;
-
-      promoToggle.classList.toggle("active", onlyPromo);
-      newToggle?.classList.toggle("active", onlyNew);
-      renderList();
-    });
-  }
-
-  if (newToggle) {
-    newToggle.addEventListener("click", () => {
-      onlyNew = !onlyNew;
-      if (onlyNew) onlyPromo = false;
-
-      newToggle.classList.toggle("active", onlyNew);
-      promoToggle?.classList.toggle("active", onlyPromo);
-      renderList();
-    });
-  }
-
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       searchQuery = "";
       selectedCategory = "";
       selectedSubcategory = "";
-      onlyPromo = false;
-      onlyNew = false;
 
       if (searchInput) searchInput.value = "";
       if (categoryFilter) categoryFilter.value = "";
       fillSubcategoryFilterOptions();
 
-      promoToggle?.classList.remove("active");
-      newToggle?.classList.remove("active");
-
       renderList();
       toast("Filtres effacés");
     });
   }
+
+  closeModalBtn?.addEventListener("click", closeModal);
+  backModalBtn?.addEventListener("click", closeModal);
+  modalBackdrop?.addEventListener("click", closeModal);
 
   if (unlockBtn) {
     unlockBtn.addEventListener("click", async () => {
@@ -617,13 +443,19 @@
   }
 
   if (unlockInput) {
-    unlockInput.addEventListener("keydown", async (e) => {
+    unlockInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         unlockBtn?.click();
       }
     });
   }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeModal();
+    }
+  });
 
   (async () => {
     const allowed = await guardApp();
