@@ -24,6 +24,7 @@ app.get("/ping", (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
 /* ================== ENV ================== */
 const TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -119,6 +120,15 @@ const SUBCATEGORY_PRESETS = {
   autre: ["accessoire", "pack", "promo", "divers", "autre"],
 };
 
+const UNIT_PRESETS = {
+  weed: ["Bag 3.5g", "Bag 7g", "Bag 14g", "Bag 28g", "10g", "25g", "50g", "100g", "200g", "500g"],
+  hash: ["10g", "25g", "50g", "100g", "200g", "500g"],
+  extract: ["1g", "2g", "5g", "10g"],
+  edible: ["1 pièce", "2 pièces", "3 pièces", "5 pièces", "10 pièces", "20 pièces", "30 pièces", "50 pièces"],
+  topical: ["1 pièce", "2 pièces", "3 pièces", "5 pièces", "10 pièces", "20 pièces", "30 pièces", "50 pièces"],
+  autre: ["1 pièce", "2 pièces", "3 pièces", "5 pièces", "10 pièces", "20 pièces", "30 pièces", "50 pièces"],
+};
+
 /* ================== UTILS ================== */
 function safeText(value) {
   return String(value || "").trim();
@@ -212,8 +222,14 @@ function parsePromoPriceInput(value) {
 }
 
 function makeQuantityOptions(data = {}) {
-  return QUANTITIES_DEFAULT.map((amount, i) => {
-    const src = data.quantity_options?.[i] || {};
+  const category = normalizeCategory(data.category || "autre");
+  const units = UNIT_PRESETS[category] || QUANTITIES_DEFAULT;
+
+  return units.map((amount) => {
+    const src = Array.isArray(data.quantity_options)
+      ? data.quantity_options.find((q) => q.amount === amount) || {}
+      : {};
+
     return {
       amount,
       price: safeText(src.price || "-"),
@@ -222,6 +238,15 @@ function makeQuantityOptions(data = {}) {
       promo_price: safeText(src.promo_price || ""),
     };
   });
+}
+
+function getUnitsForCategory(category) {
+  const cat = normalizeCategory(category || "autre");
+  return UNIT_PRESETS[cat] || QUANTITIES_DEFAULT;
+}
+
+function buildQuantitySteps(prefix, units = []) {
+  return units.map((_, index) => `${prefix}${index}`);
 }
 
 function buildEntryMeta(entry) {
@@ -285,11 +310,17 @@ function buildPagedEntryKeyboard(rows, page, totalCount, prefix, icon = "✏️"
   const nav = [];
 
   if (page > 0) {
-    nav.push({ text: "⬅️ Précédent", callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page - 1}` });
+    nav.push({
+      text: "⬅️ Précédent",
+      callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page - 1}`,
+    });
   }
 
   if ((page + 1) * ENTRY_PAGE_SIZE < totalCount) {
-    nav.push({ text: "➡️ Suivant", callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page + 1}` });
+    nav.push({
+      text: "➡️ Suivant",
+      callback_data: `${prefix.includes("delete") ? "namek_delete_page_" : "namek_edit_page_"}${page + 1}`,
+    });
   }
 
   if (nav.length) keyboard.push(nav);
@@ -988,86 +1019,84 @@ bot.on("callback_query", async (query) => {
 
   const data = query.data || "";
 
-
   try {
-  if (data === "namek_info") {
-    return bot.sendMessage(
-      chatId,
-      "ℹ️ *Centre d'informations de Namek*\n\n" +
-      "Les archives de la planète sont accessibles *7 jours sur 7*.\n\n" +
-      "🛰️ *Canal officiel*\n" +
-      "Les annonces importantes, nouveautés et signaux de promotion\n" +
-      "sont publiés directement dans le canal.\n\n" +
-      "📩 *Besoin d'aide ?*\n" +
-      "N'hésite pas à nous contacter si tu as une question.\n" +
-      "Toutes les informations de contact se trouvent dans la section *Contact*.\n\n" +
-      "Le radar de Namek reste actif en permanence.",
-      {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📢 Canal officiel", url: "https://t.me/+8ghmYKNWhFNjNGE0" }],
-            [{ text: "📩 Contact", callback_data: "namek_contact" }],
-            [{ text: "← Retour", callback_data: "namek_back_public" }],
-          ],
-        },
-      }
-    );
-  }
-
-
-if (data === "namek_contact") {
-  return bot.sendMessage(
-    chatId,
-    "📡 *Canal de communication sécurisé de Namek*\n\n" +
-    "Pour contacter le support utilise l'application *Session*.\n\n" +
-    "*Étapes :*\n" +
-    "1️⃣ Copie le code ci-dessous\n" +
-    "2️⃣ Ouvre l'application *Session*\n" +
-    "3️⃣ Lance une nouvelle conversation\n" +
-    "4️⃣ Colle ce code pour établir la communication\n\n" +
-    "*Code Session :*\n" +
-    "```\n" + SESSION_CONTACT + "\n```\n\n" +
-    "Une fois le message envoyé, la communication avec Namek pourra commencer.\n\n" +
-    "🟢 Support disponible *7j/7*.",
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📲 Télécharger Session", url: "https://getsession.org/download" }],
-          [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
-          [{ text: "← Retour", callback_data: "namek_back_public" }]
-        ]
-      }
+    if (data === "namek_info") {
+      return bot.sendMessage(
+        chatId,
+        "ℹ️ *Centre d'informations de Namek*\n\n" +
+        "Les archives de la planète sont accessibles *7 jours sur 7*.\n\n" +
+        "🛰️ *Canal officiel*\n" +
+        "Les annonces importantes, nouveautés et signaux de promotion\n" +
+        "sont publiés directement dans le canal.\n\n" +
+        "📩 *Besoin d'aide ?*\n" +
+        "N'hésite pas à nous contacter si tu as une question.\n" +
+        "Toutes les informations de contact se trouvent dans la section *Contact*.\n\n" +
+        "Le radar de Namek reste actif en permanence.",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📢 Canal officiel", url: "https://t.me/+8ghmYKNWhFNjNGE0" }],
+              [{ text: "📩 Contact", callback_data: "namek_contact" }],
+              [{ text: "← Retour", callback_data: "namek_back_public" }],
+            ],
+          },
+        }
+      );
     }
-  );
-}
+
+    if (data === "namek_contact") {
+      return bot.sendMessage(
+        chatId,
+        "📡 *Canal de communication sécurisé de Namek*\n\n" +
+        "Pour contacter le support utilise l'application *Session*.\n\n" +
+        "*Étapes :*\n" +
+        "1️⃣ Copie le code ci-dessous\n" +
+        "2️⃣ Ouvre l'application *Session*\n" +
+        "3️⃣ Lance une nouvelle conversation\n" +
+        "4️⃣ Colle ce code pour établir la communication\n\n" +
+        "*Code Session :*\n" +
+        "```\n" + SESSION_CONTACT + "\n```\n\n" +
+        "Une fois le message envoyé, la communication avec Namek pourra commencer.\n\n" +
+        "🟢 Support disponible *7j/7*.",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📲 Télécharger Session", url: "https://getsession.org/download" }],
+              [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
+              [{ text: "← Retour", callback_data: "namek_back_public" }],
+            ],
+          },
+        }
+      );
+    }
 
     if (data === "namek_follow") {
-  return bot.sendMessage(
-    chatId,
-    [
-      "🟢 *Canal officiel de la planète Namek*",
-      "",
-      "Rejoins la zone de transmission pour suivre :",
-      "• les nouveaux arrivages",
-      "• les promotions actives",
-      "• les annonces spéciales",
-      "",
-      "Les signaux de Namek passent par ici 👇",
-    ].join("\n"),
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🛸 Rejoindre le canal Namek", url: CONTACT_CHANNEL }],
-          [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
-          [{ text: "← Retour", callback_data: "namek_back_public" }],
-        ],
-      },
+      return bot.sendMessage(
+        chatId,
+        [
+          "🟢 *Canal officiel de la planète Namek*",
+          "",
+          "Rejoins la zone de transmission pour suivre :",
+          "• les nouveaux arrivages",
+          "• les promotions actives",
+          "• les annonces spéciales",
+          "",
+          "Les signaux de Namek passent par ici 👇",
+        ].join("\n"),
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛸 Rejoindre le canal Namek", url: CONTACT_CHANNEL }],
+              [{ text: "📸 Instagram", url: "https://www.instagram.com/namekconnexion.3/" }],
+              [{ text: "← Retour", callback_data: "namek_back_public" }],
+            ],
+          },
+        }
+      );
     }
-  );
-}
 
     if (data === "namek_back_public") {
       return sendPublicMenu(chatId);
@@ -1256,13 +1285,9 @@ if (data === "namek_contact") {
         data: {
           status: "normal",
           is_featured: false,
-          quantity_options: QUANTITIES_DEFAULT.map((amount) => ({
-            amount,
-            price: "-",
-            description: "-",
-            original_price: "",
-            promo_price: "",
-          })),
+          category: "",
+          subcategory: "",
+          quantity_options: [],
         },
       });
       wizardHistory.set(chatId, []);
@@ -1313,103 +1338,112 @@ if (data === "namek_contact") {
     }
 
     if (data.startsWith("nef_")) {
-  const state = adminWizard.get(chatId);
-  if (!state || state.type !== "edit_entry" || state.step !== "field") return;
+      const state = adminWizard.get(chatId);
+      if (!state || state.type !== "edit_entry" || state.step !== "field") return;
 
-  const rest = data.replace("nef_", "");
-  const firstUnderscore = rest.indexOf("_");
-  if (firstUnderscore === -1) return;
+      const rest = data.replace("nef_", "");
+      const firstUnderscore = rest.indexOf("_");
+      if (firstUnderscore === -1) return;
 
-  const fieldCode = rest.slice(0, firstUnderscore);
-  const id = rest.slice(firstUnderscore + 1);
+      const fieldCode = rest.slice(0, firstUnderscore);
+      const id = rest.slice(firstUnderscore + 1);
 
-  const fieldMap = {
-    t: "title",
-    d: "description",
-    i: "image",
-    c: "category",
-    s: "subcategory",
-    m: "micron",
-    p: "prices",
-    st: "status",
-  };
+      const fieldMap = {
+        t: "title",
+        d: "description",
+        i: "image",
+        c: "category",
+        s: "subcategory",
+        m: "micron",
+        p: "prices",
+        st: "status",
+      };
 
-  const field = fieldMap[fieldCode];
-  if (!field) return;
+      const field = fieldMap[fieldCode];
+      if (!field) return;
 
-  pushHistory(chatId, state);
-  state.data.id = id;
-  state.data.edit_field = field;
+      pushHistory(chatId, state);
+      state.data.id = id;
+      state.data.edit_field = field;
 
-  if (field === "title") {
-    state.step = "edit_title";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "✏️ Nouveau titre ?", { reply_markup: wizardButtons() });
-  }
+      if (field === "title") {
+        state.step = "edit_title";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "✏️ Nouveau titre ?", { reply_markup: wizardButtons() });
+      }
 
-  if (field === "description") {
-    state.step = "edit_description";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "📝 Nouvelle description ?", { reply_markup: wizardButtons() });
-  }
+      if (field === "description") {
+        state.step = "edit_description";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "📝 Nouvelle description ?", { reply_markup: wizardButtons() });
+      }
 
-  if (field === "image") {
-    state.step = "edit_image";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "🖼️ Nouvelle URL image ?\n\nEnvoie `-` pour enlever l’image.", {
-      parse_mode: "Markdown",
-      reply_markup: wizardButtons(),
-    });
-  }
+      if (field === "image") {
+        state.step = "edit_image";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "🖼️ Nouvelle URL image ?\n\nEnvoie `-` pour enlever l’image.", {
+          parse_mode: "Markdown",
+          reply_markup: wizardButtons(),
+        });
+      }
 
-  if (field === "micron") {
-    state.step = "edit_micron";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "🧪 Nouveau micron ?\n\nEnvoie `-` si aucun.", {
-      parse_mode: "Markdown",
-      reply_markup: wizardButtons(),
-    });
-  }
+      if (field === "micron") {
+        state.step = "edit_micron";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "🧪 Nouveau micron ?\n\nEnvoie `-` si aucun.", {
+          parse_mode: "Markdown",
+          reply_markup: wizardButtons(),
+        });
+      }
 
-  if (field === "category") {
-    state.step = "edit_category";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "🌿 Nouvelle catégorie :", {
-      reply_markup: categoryKeyboard(),
-    });
-  }
+      if (field === "category") {
+        state.step = "edit_category";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "🌿 Nouvelle catégorie :", {
+          reply_markup: categoryKeyboard(),
+        });
+      }
 
-  if (field === "subcategory") {
-    const entry = await dbGetEntryById(id);
-    if (!entry) throw new Error("Fiche introuvable.");
-    state.data.category = entry.category;
-    state.step = "edit_subcategory";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "📦 Nouvelle sous-catégorie :", {
-      reply_markup: subcategoryKeyboard(entry.category),
-    });
-  }
+      if (field === "subcategory") {
+        const entry = await dbGetEntryById(id);
+        if (!entry) throw new Error("Fiche introuvable.");
+        state.data.category = entry.category;
+        state.step = "edit_subcategory";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "📦 Nouvelle sous-catégorie :", {
+          reply_markup: subcategoryKeyboard(entry.category),
+        });
+      }
 
-  if (field === "prices") {
-    const entry = await dbGetEntryById(id);
-    if (!entry) throw new Error("Fiche introuvable.");
-    state.data.quantity_options = makeQuantityOptions(entry);
-    state.step = "edit_q10";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "💸 Nouveau contenu pour 10g : Prix + description, ou `-`", {
-      parse_mode: "Markdown",
-      reply_markup: wizardButtons(),
-    });
-  }
+      if (field === "prices") {
+        const entry = await dbGetEntryById(id);
+        if (!entry) throw new Error("Fiche introuvable.");
 
-  if (field === "status") {
-    state.step = "status";
-    adminWizard.set(chatId, state);
-    return bot.sendMessage(chatId, "Choisis le nouveau statut :", {
-      reply_markup: statusKeyboard(),
-    });
-  }
-}
+        const units = getUnitsForCategory(entry.category);
+        state.data.category = entry.category;
+        state.data.quantity_options = makeQuantityOptions(entry);
+        state.step = "edit_q_0";
+        adminWizard.set(chatId, state);
+
+        return bot.sendMessage(
+          chatId,
+          `💸 Nouveau contenu pour ${units[0]} : Prix + description, ou \`-\``,
+          {
+            parse_mode: "Markdown",
+            reply_markup: wizardButtons(),
+          }
+        );
+      }
+
+      if (field === "status") {
+        state.step = "status";
+        adminWizard.set(chatId, state);
+        return bot.sendMessage(chatId, "Choisis le nouveau statut :", {
+          reply_markup: statusKeyboard(),
+        });
+      }
+    }
+
     if (data === "namek_delete_entry") {
       const { rows, total } = await dbListEntriesPage(0, ENTRY_PAGE_SIZE);
       if (!rows.length) return bot.sendMessage(chatId, "Aucune fiche à supprimer.");
@@ -1450,6 +1484,7 @@ if (data === "namek_contact") {
       if (state.type === "add_entry" && state.step === "category") {
         pushHistory(chatId, state);
         state.data.category = normalizedCategory;
+        state.data.quantity_options = makeQuantityOptions({ category: normalizedCategory });
         state.step = "subcategory";
         adminWizard.set(chatId, state);
 
@@ -1477,6 +1512,11 @@ if (data === "namek_contact") {
       if (state.type === "add_entry" && state.step === "subcategory") {
         pushHistory(chatId, state);
         state.data.subcategory = "";
+        state.data.quantity_options = makeQuantityOptions({
+          category: state.data.category,
+          subcategory: "",
+          quantity_options: state.data.quantity_options,
+        });
         state.step = "micron";
         adminWizard.set(chatId, state);
 
@@ -1513,6 +1553,11 @@ if (data === "namek_contact") {
       if (state.type === "add_entry" && state.step === "subcategory") {
         pushHistory(chatId, state);
         state.data.subcategory = normalizeSubcategory(state.data.category, subcategory);
+        state.data.quantity_options = makeQuantityOptions({
+          category: state.data.category,
+          subcategory: state.data.subcategory,
+          quantity_options: state.data.quantity_options,
+        });
         state.step = "micron";
         adminWizard.set(chatId, state);
 
@@ -1550,13 +1595,18 @@ if (data === "namek_contact") {
       state.data.status = normalizeStatus(status);
 
       if (state.data.status === "promotion") {
-        state.data.promo_prices = Array(QUANTITIES_DEFAULT.length).fill("");
-        state.step = "promo_q10";
+        const entry = await dbGetEntryById(state.data.id);
+        if (!entry) throw new Error("Fiche introuvable.");
+
+        const promoUnits = getUnitsForCategory(entry.category);
+        state.data.category = entry.category;
+        state.data.promo_prices = Array(promoUnits.length).fill("");
+        state.step = "promo_q_0";
         adminWizard.set(chatId, state);
 
         return bot.sendMessage(
           chatId,
-          `Prix promo pour ${QUANTITIES_DEFAULT[0]} ?\n\nEnvoie le prix promo ou "-" pour aucune promo.`,
+          `Prix promo pour ${promoUnits[0]} ?\n\nEnvoie le prix promo ou "-" pour aucune promo.`,
           {
             parse_mode: "Markdown",
             reply_markup: wizardButtons(),
@@ -1723,16 +1773,23 @@ bot.on("message", async (msg) => {
       if (state.step === "description") {
         pushHistory(chatId, state);
         state.data.description = text;
-        state.step = "q10";
+
+        const units = getUnitsForCategory(state.data.category);
+        state.step = "q_0";
         adminWizard.set(chatId, state);
 
-        return bot.sendMessage(chatId, "7/14 — Pastille 10g : Prix + description, ou `-`", {
-          parse_mode: "Markdown",
-          reply_markup: wizardButtons(),
-        });
+        return bot.sendMessage(
+          chatId,
+          `7/${6 + units.length} — Variante ${units[0]} : Prix + description, ou \`-\``,
+          {
+            parse_mode: "Markdown",
+            reply_markup: wizardButtons(),
+          }
+        );
       }
 
-      const qSteps = ["q10", "q25", "q50", "q100", "q200", "q300", "q400", "q500"];
+      const units = getUnitsForCategory(state.data.category);
+      const qSteps = buildQuantitySteps("q_", units);
       const qIndex = qSteps.indexOf(state.step);
 
       if (qIndex !== -1) {
@@ -1740,7 +1797,7 @@ bot.on("message", async (msg) => {
         const parsed = parseQuantityInput(text);
 
         state.data.quantity_options[qIndex] = {
-          amount: QUANTITIES_DEFAULT[qIndex],
+          amount: units[qIndex],
           price: parsed.price,
           description: parsed.description,
           original_price: "",
@@ -1753,7 +1810,7 @@ bot.on("message", async (msg) => {
 
           return bot.sendMessage(
             chatId,
-            `${qIndex + 8}/14 — Pastille ${QUANTITIES_DEFAULT[qIndex + 1]} : Prix + description, ou \`-\``,
+            `${qIndex + 8}/${6 + units.length} — Variante ${units[qIndex + 1]} : Prix + description, ou \`-\``,
             {
               parse_mode: "Markdown",
               reply_markup: wizardButtons(),
@@ -1847,7 +1904,8 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "✅ Micron modifié.").then(() => sendStartMenu(chatId, msg.from));
       }
 
-      const editPriceSteps = ["edit_q10", "edit_q25", "edit_q50", "edit_q100", "edit_q200", "edit_q300", "edit_q400", "edit_q500"];
+      const editUnits = getUnitsForCategory(state.data.category);
+      const editPriceSteps = buildQuantitySteps("edit_q_", editUnits);
       const editPriceIndex = editPriceSteps.indexOf(state.step);
 
       if (editPriceIndex !== -1) {
@@ -1855,7 +1913,7 @@ bot.on("message", async (msg) => {
         const parsed = parseQuantityInput(text);
 
         state.data.quantity_options[editPriceIndex] = {
-          amount: QUANTITIES_DEFAULT[editPriceIndex],
+          amount: editUnits[editPriceIndex],
           price: parsed.price,
           description: parsed.description,
           original_price: "",
@@ -1868,7 +1926,7 @@ bot.on("message", async (msg) => {
 
           return bot.sendMessage(
             chatId,
-            `💸 Nouveau contenu pour ${QUANTITIES_DEFAULT[editPriceIndex + 1]} : Prix + description, ou \`-\``,
+            `💸 Nouveau contenu pour ${editUnits[editPriceIndex + 1]} : Prix + description, ou \`-\``,
             {
               parse_mode: "Markdown",
               reply_markup: wizardButtons(),
@@ -1888,7 +1946,8 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "✅ Prix / descriptions modifiés.").then(() => sendStartMenu(chatId, msg.from));
       }
 
-      const promoSteps = ["promo_q10", "promo_q25", "promo_q50", "promo_q100", "promo_q200", "promo_q300", "promo_q400", "promo_q500"];
+      const promoUnits = getUnitsForCategory(state.data.category);
+      const promoSteps = buildQuantitySteps("promo_q_", promoUnits);
       const promoIndex = promoSteps.indexOf(state.step);
 
       if (promoIndex !== -1) {
@@ -1901,7 +1960,7 @@ bot.on("message", async (msg) => {
 
           return bot.sendMessage(
             chatId,
-            `Prix promo pour ${QUANTITIES_DEFAULT[promoIndex + 1]} ?\n\nEnvoie le prix promo ou "-" pour aucune promo.`,
+            `Prix promo pour ${promoUnits[promoIndex + 1]} ?\n\nEnvoie le prix promo ou "-" pour aucune promo.`,
             {
               parse_mode: "Markdown",
               reply_markup: wizardButtons(),
@@ -1909,16 +1968,17 @@ bot.on("message", async (msg) => {
           );
         }
 
-       const updated = await dbApplyPromotionPrices(state.data.id, state.data.promo_prices);
+        const updated = await dbApplyPromotionPrices(state.data.id, state.data.promo_prices);
 
-await broadcastPromoEntry(updated, msg.from.id);
+        await broadcastPromoEntry(updated, msg.from.id);
 
-clearWizard(chatId);
+        clearWizard(chatId);
 
-await dbLogAction(msg.from.id, "apply_promotion_prices", "entry", updated.id, {
-  status: updated.status,
-  promo_prices: state.data.promo_prices,
-});
+        await dbLogAction(msg.from.id, "apply_promotion_prices", "entry", updated.id, {
+          status: updated.status,
+          promo_prices: state.data.promo_prices,
+        });
+
         return bot.sendMessage(
           chatId,
           `✅ Promotion appliquée.\n\nTitre : ${updated.title}\nStatut : ${updated.status}`,
